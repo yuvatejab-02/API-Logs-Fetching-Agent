@@ -1,6 +1,4 @@
-# LocalStack Test Infrastructure
-
-## Quick Start
+## Local Testing Qucik start
 
 1. **Start LocalStack:**
 cd tests/localstack
@@ -22,13 +20,22 @@ curl http://localhost:14566/_localstack/health
 
 text
 
-## Cleanup
+4. **Run main file**
+run python -m src.main --incident-file tests/test_data/sample_payloads.json
+
+5. **Cleanup**
 
 Stop LocalStack
 docker-compose down
 
-Clean data
-rm -rf volume/
 
-Remove containers
-docker-compose down -v
+## Docker Testing Quick Start
+
+1. **Run complete test environment**
+docker-compose -f docker-compose.test.yml up --build
+
+2. **Check results in S3 bucket**
+http://localhost:14566/incident-logs-test
+
+3. **Clean Up**
+docker-compose -f docker-compose.test.yml down
