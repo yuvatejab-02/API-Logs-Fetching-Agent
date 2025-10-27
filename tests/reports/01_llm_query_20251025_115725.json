@@ -1,0 +1,67 @@
+{
+  "test_name": "01_llm_query_generation",
+  "timestamp": "2025-10-25T11:57:25.896928+00:00",
+  "status": "passed",
+  "input": {
+    "incident_payload": {
+      "compslug": "testcompany",
+      "Session_id": "test-session-001",
+      "incident_id": "INC_E2E_001",
+      "title": "Spike in 5xx for payments",
+      "service": {
+        "id": "payments-svc-001",
+        "name": "payments"
+      }
+    },
+    "lookback_hours": 1
+  },
+  "output": {
+    "filter_expression": "service.name = 'payments-service' AND http.status_code >= 500 AND http.status_code < 600 AND severity_text IN ('ERROR', 'WARN')",
+    "reasoning": "Since this is a 5xx spike in payments service, we need to filter for the payments service, all 5xx status codes (500-599), and focus on ERROR and WARN severity levels to capture error details and warnings leading up to failures",
+    "key_attributes": [
+      "service.name",
+      "http.status_code",
+      "severity_text"
+    ],
+    "full_query": {
+      "start": 1761389845896,
+      "end": 1761393445896,
+      "requestType": "raw",
+      "variables": {},
+      "compositeQuery": {
+        "queries": [
+          {
+            "type": "builder_query",
+            "spec": {
+              "name": "A",
+              "signal": "logs",
+              "filter": {
+                "expression": "service.name = 'payments-service' AND http.status_code >= 500 AND http.status_code < 600 AND severity_text IN ('ERROR', 'WARN')"
+              },
+              "order": [
+                {
+                  "key": {
+                    "name": "timestamp"
+                  },
+                  "direction": "desc"
+                },
+                {
+                  "key": {
+                    "name": "id"
+                  },
+                  "direction": "desc"
+                }
+              ],
+              "offset": 0,
+              "limit": 1000
+            }
+          }
+        ]
+      }
+    }
+  },
+  "llm_info": {
+    "model": "anthropic.claude-3-5-sonnet-20241022-v2:0",
+    "service": "AWS Bedrock"
+  }
+}

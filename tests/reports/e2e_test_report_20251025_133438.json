@@ -1,0 +1,416 @@
+{
+  "test_suite": "incident_log_analyzer_e2e",
+  "started_at": "2025-10-25T13:34:18.933970+00:00",
+  "completed_at": "2025-10-25T13:34:38.253886+00:00",
+  "duration_seconds": 19.32,
+  "total_tests": 3,
+  "passed": 3,
+  "failed": 0,
+  "component_tests": [
+    {
+      "test_name": "Component 01: LLM Query Generation",
+      "test_file": "01_test_llm_query.py",
+      "status": "passed",
+      "duration_seconds": 6.67,
+      "return_code": 0,
+      "report_data": {
+        "test_name": "01_llm_query_generation",
+        "timestamp": "2025-10-25T13:34:25.415986+00:00",
+        "status": "passed",
+        "input": {
+          "incident_payload": {
+            "compslug": "testcompany",
+            "Session_id": "test-session-001",
+            "incident_id": "INC_E2E_001",
+            "title": "Spike in 5xx for payments",
+            "service": {
+              "id": "payments-svc-001",
+              "name": "payments"
+            }
+          },
+          "lookback_hours": 1
+        },
+        "output": {
+          "filter_expression": "service.name = 'payments-service' AND http.status_code >= 500 AND http.status_code < 600 AND severity_text IN ('ERROR', 'WARN')",
+          "reasoning": "Since the incident reports 5xx spikes in payments service, we filter for the payments service, all 5xx status codes (500-599), and high severity logs (ERROR/WARN) to capture error details and warnings leading to failures",
+          "key_attributes": [
+            "service.name",
+            "http.status_code",
+            "severity_text"
+          ],
+          "full_query": {
+            "start": 1761395665415,
+            "end": 1761399265415,
+            "requestType": "raw",
+            "variables": {},
+            "compositeQuery": {
+              "queries": [
+                {
+                  "type": "builder_query",
+                  "spec": {
+                    "name": "A",
+                    "signal": "logs",
+                    "filter": {
+                      "expression": "service.name = 'payments-service' AND http.status_code >= 500 AND http.status_code < 600 AND severity_text IN ('ERROR', 'WARN')"
+                    },
+                    "order": [
+                      {
+                        "key": {
+                          "name": "timestamp"
+                        },
+                        "direction": "desc"
+                      },
+                      {
+                        "key": {
+                          "name": "id"
+                        },
+                        "direction": "desc"
+                      }
+                    ],
+                    "offset": 0,
+                    "limit": 1000
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "llm_info": {
+          "model": "anthropic.claude-3-5-sonnet-20241022-v2:0",
+          "service": "AWS Bedrock"
+        }
+      }
+    },
+    {
+      "test_name": "Component 02: SigNoz Fetch & Transform",
+      "test_file": "02_test_signoz_fetch.py",
+      "status": "passed",
+      "duration_seconds": 10.93,
+      "return_code": 0,
+      "report_data": {
+        "test_name": "02_signoz_fetch_transform",
+        "timestamp": "2025-10-25T13:34:36.380581+00:00",
+        "status": "passed",
+        "input": {
+          "incident_id": "INC_E2E_001",
+          "filter_expression": "service.name = 'payments-service' AND http.status_code >= 500 AND http.status_code < 600 AND severity_text IN ('ERROR', 'WARN')",
+          "signoz_query": {
+            "start": 1761395672176,
+            "end": 1761399272176,
+            "requestType": "raw",
+            "variables": {},
+            "compositeQuery": {
+              "queries": [
+                {
+                  "type": "builder_query",
+                  "spec": {
+                    "name": "A",
+                    "signal": "logs",
+                    "filter": {
+                      "expression": "service.name = 'payments-service' AND http.status_code >= 500 AND http.status_code < 600 AND severity_text IN ('ERROR', 'WARN')"
+                    },
+                    "order": [
+                      {
+                        "key": {
+                          "name": "timestamp"
+                        },
+                        "direction": "desc"
+                      },
+                      {
+                        "key": {
+                          "name": "id"
+                        },
+                        "direction": "desc"
+                      }
+                    ],
+                    "offset": 0,
+                    "limit": 1000
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "output": {
+          "raw_response_size": 272547,
+          "logs_fetched": 222,
+          "sample_log": {
+            "timestamp": "2025-10-25T13:26:07.061139968Z",
+            "service": "payments-service",
+            "instance_id": "payments-service-a42edaef",
+            "level": "ERROR",
+            "request_id": "c58386c644b1b23cb500086674f7b645",
+            "company_id": "testing",
+            "user_id": "user-9815",
+            "method": "GET",
+            "path": "/api/v1/inventory",
+            "status_code": 504,
+            "response_time_ms": 90,
+            "message": "GET /api/v1/inventory - 504 (90ms)"
+          },
+          "transformed_logs": [
+            {
+              "timestamp": "2025-10-25T13:26:07.061139968Z",
+              "service": "payments-service",
+              "instance_id": "payments-service-a42edaef",
+              "level": "ERROR",
+              "request_id": "c58386c644b1b23cb500086674f7b645",
+              "company_id": "testing",
+              "user_id": "user-9815",
+              "method": "GET",
+              "path": "/api/v1/inventory",
+              "status_code": 504,
+              "response_time_ms": 90,
+              "message": "GET /api/v1/inventory - 504 (90ms)"
+            },
+            {
+              "timestamp": "2025-10-25T13:26:07.06061312Z",
+              "service": "payments-service",
+              "instance_id": "payments-service-a42edaef",
+              "level": "ERROR",
+              "request_id": "c58386c644b1b23cb500086674f7b645",
+              "company_id": "testing",
+              "user_id": "user-9815",
+              "method": "GET",
+              "path": "/api/v1/inventory",
+              "status_code": 504,
+              "error_message": "Invalid input parameter",
+              "stack_trace": "at service.handler(handler.py:513)",
+              "message": "Request failed: Invalid input parameter"
+            },
+            {
+              "timestamp": "2025-10-25T13:26:05.184913664Z",
+              "service": "payments-service",
+              "instance_id": "payments-service-a42edaef",
+              "level": "ERROR",
+              "request_id": "c13dcc304c15c20b6230701221bd7495",
+              "company_id": "testing",
+              "user_id": "user-1330",
+              "method": "GET",
+              "path": "/api/v1/users",
+              "status_code": 503,
+              "response_time_ms": 65,
+              "message": "GET /api/v1/users - 503 (65ms)"
+            },
+            {
+              "timestamp": "2025-10-25T13:26:05.184524288Z",
+              "service": "payments-service",
+              "instance_id": "payments-service-a42edaef",
+              "level": "ERROR",
+              "request_id": "c13dcc304c15c20b6230701221bd7495",
+              "company_id": "testing",
+              "user_id": "user-1330",
+              "method": "GET",
+              "path": "/api/v1/users",
+              "status_code": 503,
+              "error_message": "Connection refused",
+              "stack_trace": "at service.handler(handler.py:339)",
+              "message": "Request failed: Connection refused"
+            },
+            {
+              "timestamp": "2025-10-25T13:26:00.949135872Z",
+              "service": "payments-service",
+              "instance_id": "payments-service-a42edaef",
+              "level": "ERROR",
+              "request_id": "63b16fbe470fafa25b7fb879cf3a5df9",
+              "company_id": "testing",
+              "user_id": "user-1459",
+              "method": "DELETE",
+              "path": "/api/v1/inventory",
+              "status_code": 503,
+              "response_time_ms": 84,
+              "message": "DELETE /api/v1/inventory - 503 (84ms)"
+            }
+          ]
+        },
+        "signoz_info": {
+          "endpoint": "https://selected-starling.us.signoz.cloud",
+          "api_version": "v5"
+        }
+      }
+    },
+    {
+      "test_name": "Component 03: S3 Storage",
+      "test_file": "03_test_s3_storage.py",
+      "status": "passed",
+      "duration_seconds": 1.6,
+      "return_code": 0,
+      "report_data": {
+        "test_name": "03_s3_storage",
+        "timestamp": "2025-10-25T13:34:38.047075+00:00",
+        "status": "passed",
+        "input": {
+          "logs_count": 2,
+          "incident_id": "INC_E2E_001"
+        },
+        "output": {
+          "s3_bucket": "incident-logs-test",
+          "s3_key": "incidents/INC_E2E_001/test/logs_20251025_133437.json",
+          "s3_endpoint": "http://localhost:14566",
+          "upload_verified": true,
+          "files_in_incident": 3
+        },
+        "storage_info": {
+          "backend": "LocalStack S3",
+          "region": "us-east-1"
+        }
+      }
+    }
+  ],
+  "data_flow": {
+    "incident_payload": {
+      "compslug": "testcompany",
+      "Session_id": "test-session-001",
+      "incident_id": "INC_E2E_001",
+      "title": "Spike in 5xx for payments",
+      "service": {
+        "id": "payments-svc-001",
+        "name": "payments"
+      }
+    },
+    "llm_query": {
+      "filter_expression": "service.name = 'payments-service' AND http.status_code >= 500 AND http.status_code < 600 AND severity_text IN ('ERROR', 'WARN')",
+      "reasoning": "Since the incident reports 5xx spikes in payments service, we filter for the payments service, all 5xx status codes (500-599), and high severity logs (ERROR/WARN) to capture error details and warnings leading to failures",
+      "key_attributes": [
+        "service.name",
+        "http.status_code",
+        "severity_text"
+      ],
+      "full_query": {
+        "start": 1761395665415,
+        "end": 1761399265415,
+        "requestType": "raw",
+        "variables": {},
+        "compositeQuery": {
+          "queries": [
+            {
+              "type": "builder_query",
+              "spec": {
+                "name": "A",
+                "signal": "logs",
+                "filter": {
+                  "expression": "service.name = 'payments-service' AND http.status_code >= 500 AND http.status_code < 600 AND severity_text IN ('ERROR', 'WARN')"
+                },
+                "order": [
+                  {
+                    "key": {
+                      "name": "timestamp"
+                    },
+                    "direction": "desc"
+                  },
+                  {
+                    "key": {
+                      "name": "id"
+                    },
+                    "direction": "desc"
+                  }
+                ],
+                "offset": 0,
+                "limit": 1000
+              }
+            }
+          ]
+        }
+      }
+    },
+    "signoz_logs": {
+      "raw_response_size": 272547,
+      "logs_fetched": 222,
+      "sample_log": {
+        "timestamp": "2025-10-25T13:26:07.061139968Z",
+        "service": "payments-service",
+        "instance_id": "payments-service-a42edaef",
+        "level": "ERROR",
+        "request_id": "c58386c644b1b23cb500086674f7b645",
+        "company_id": "testing",
+        "user_id": "user-9815",
+        "method": "GET",
+        "path": "/api/v1/inventory",
+        "status_code": 504,
+        "response_time_ms": 90,
+        "message": "GET /api/v1/inventory - 504 (90ms)"
+      },
+      "transformed_logs": [
+        {
+          "timestamp": "2025-10-25T13:26:07.061139968Z",
+          "service": "payments-service",
+          "instance_id": "payments-service-a42edaef",
+          "level": "ERROR",
+          "request_id": "c58386c644b1b23cb500086674f7b645",
+          "company_id": "testing",
+          "user_id": "user-9815",
+          "method": "GET",
+          "path": "/api/v1/inventory",
+          "status_code": 504,
+          "response_time_ms": 90,
+          "message": "GET /api/v1/inventory - 504 (90ms)"
+        },
+        {
+          "timestamp": "2025-10-25T13:26:07.06061312Z",
+          "service": "payments-service",
+          "instance_id": "payments-service-a42edaef",
+          "level": "ERROR",
+          "request_id": "c58386c644b1b23cb500086674f7b645",
+          "company_id": "testing",
+          "user_id": "user-9815",
+          "method": "GET",
+          "path": "/api/v1/inventory",
+          "status_code": 504,
+          "error_message": "Invalid input parameter",
+          "stack_trace": "at service.handler(handler.py:513)",
+          "message": "Request failed: Invalid input parameter"
+        },
+        {
+          "timestamp": "2025-10-25T13:26:05.184913664Z",
+          "service": "payments-service",
+          "instance_id": "payments-service-a42edaef",
+          "level": "ERROR",
+          "request_id": "c13dcc304c15c20b6230701221bd7495",
+          "company_id": "testing",
+          "user_id": "user-1330",
+          "method": "GET",
+          "path": "/api/v1/users",
+          "status_code": 503,
+          "response_time_ms": 65,
+          "message": "GET /api/v1/users - 503 (65ms)"
+        },
+        {
+          "timestamp": "2025-10-25T13:26:05.184524288Z",
+          "service": "payments-service",
+          "instance_id": "payments-service-a42edaef",
+          "level": "ERROR",
+          "request_id": "c13dcc304c15c20b6230701221bd7495",
+          "company_id": "testing",
+          "user_id": "user-1330",
+          "method": "GET",
+          "path": "/api/v1/users",
+          "status_code": 503,
+          "error_message": "Connection refused",
+          "stack_trace": "at service.handler(handler.py:339)",
+          "message": "Request failed: Connection refused"
+        },
+        {
+          "timestamp": "2025-10-25T13:26:00.949135872Z",
+          "service": "payments-service",
+          "instance_id": "payments-service-a42edaef",
+          "level": "ERROR",
+          "request_id": "63b16fbe470fafa25b7fb879cf3a5df9",
+          "company_id": "testing",
+          "user_id": "user-1459",
+          "method": "DELETE",
+          "path": "/api/v1/inventory",
+          "status_code": 503,
+          "response_time_ms": 84,
+          "message": "DELETE /api/v1/inventory - 503 (84ms)"
+        }
+      ]
+    },
+    "s3_storage": {
+      "s3_bucket": "incident-logs-test",
+      "s3_key": "incidents/INC_E2E_001/test/logs_20251025_133437.json",
+      "s3_endpoint": "http://localhost:14566",
+      "upload_verified": true,
+      "files_in_incident": 3
+    }
+  }
+}

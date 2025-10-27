@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  incident-analyzer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: incident-log-analyzer
+    environment:
+      # AWS Bedrock
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION}
+      - BEDROCK_MODEL_ID=${BEDROCK_MODEL_ID}
+      
+      # SigNoz
+      - SIGNOZ_API_ENDPOINT=${SIGNOZ_API_ENDPOINT}
+      - SIGNOZ_API_KEY=${SIGNOZ_API_KEY}
+      
+      # S3
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME}
+      - USE_LOCALSTACK=${USE_LOCALSTACK:-false}
+      - LOCALSTACK_ENDPOINT=${LOCALSTACK_ENDPOINT}
+      
+      # Application
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - POLLING_DURATION_MINUTES=${POLLING_DURATION_MINUTES:-30}
+      - POLLING_INTERVAL_SECONDS=${POLLING_INTERVAL_SECONDS:-30}
+    volumes:
+      - ./output:/app/output
+      - ./src:/app/src  # For development hot-reload
+    networks:
+      - incident-network
+    depends_on:
+      - localstack
+    command: python -m src.main --incident-json '{"incident_id":"INC_docker_test","title":"Docker test incident","service":{"name":"payments"}}'
+
+  localstack:
+    image: localstack/localstack:latest
+    container_name: localstack-incident-analyzer
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=s3,sqs
+      - DEBUG=1
+      - DATA_DIR=/tmp/localstack/data
+      - PERSISTENCE=1
+    volumes:
+      - "./localstack/data:/tmp/localstack"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    networks:
+      - incident-network
+
+networks:
+  incident-network:
+    driver: bridge

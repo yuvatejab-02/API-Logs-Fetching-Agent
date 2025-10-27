@@ -1,0 +1,38 @@
+{
+  "test_cases": [
+
+     {
+      "name": "database_connection_failure",
+      "payload": {
+        "alert_id": "ALT_xyz789",
+        "severity": "critical",
+        "message": "Database connection pool exhausted",
+        "application": "user-service",
+        "error_pattern": "connection refused"
+      }
+    },
+    {
+      "name": "5xx_spike_in_payments",
+      "payload": {
+        "compslug": "companyname",
+        "Session_id": "7b3f2f30-0c4b-4c42-9f8f-7e3d2b8e2a61",
+        "incident_id": "INC_9d0f2a3a",
+        "title": "Spike in 5xx for payments",
+        "service": {
+          "id": "al89asf9asdhjfaslkdjfl",
+          "name": "payments-service"
+        }
+      }
+    },
+    {
+      "name": "high_latency_api",
+      "payload": {
+        "incident_id": "INC_abc123",
+        "title": "High latency on /api/v1/orders endpoint",
+        "service_name": "order-service",
+        "affected_route": "/api/v1/orders",
+        "metric_threshold": "response_time > 2000ms"
+      }
+    }
+  ]
+}

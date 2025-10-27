@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# Output and data
+output/
+*.json
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile
+docker-compose*.yml
+
+# Testing
+tests/
+test_*.py
+debug_*.py
+
+# LocalStack data
+localstack/data/
+
+# Environment
+.env
