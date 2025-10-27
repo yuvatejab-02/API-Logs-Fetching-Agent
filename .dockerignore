@@ -7,6 +7,7 @@ __pycache__/
 venv/
 env/
 ENV/
+*.egg-info/
 
 # Output and data
 output/
@@ -23,17 +24,22 @@ output/
 .git/
 .gitignore
 
-# Docker
-Dockerfile
-docker-compose*.yml
-
 # Testing
 tests/
 test_*.py
 debug_*.py
 
-# LocalStack data
+# LocalStack
 localstack/data/
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.dockerignore
 
 # Environment
 .env
+
+# Documentation
+docs/
+*.md
