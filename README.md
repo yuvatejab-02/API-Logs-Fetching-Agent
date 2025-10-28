@@ -12,11 +12,11 @@ Check containers
 
 docker ps | grep incident-analyzer-localstack
 
-Check health
+4. **Check health**
 
 curl http://localhost:14566/_localstack/health
 
-4. **Run main file**
+5. **Run main file**
    
 run python -m src.main --incident-file tests/test_data/sample_payloads.json
 
@@ -33,11 +33,11 @@ docker-compose down
    
 docker-compose -f docker-compose.test.yml up --build
 
-3. **Check results in S3 bucket**
+2. **Check results in S3 bucket**
    
 http://localhost:14566/incident-logs-test
 
-5. **Clean Up**
+3. **Clean Up**
    
 docker-compose -f docker-compose.test.yml down
 
@@ -64,15 +64,15 @@ cd C:\Users\yuvat\OneDrive\Documents\incident-log-analyser
    
 pytest tests/ -v
 
-4. **Run only E2E test**
+3. **Run only E2E test**
    
 pytest tests/test_e2e.py -v -s
 
-Make sure LocalStack is running for e2e, s3 testing
+4. Make sure LocalStack is running for e2e, s3 testing
 
 docker-compose -f docker-compose.test.yml up -d localstack
 
-4. **Run all tests with detailed output**
+5. **Run all tests with detailed output**
    
 pytest tests/ -v -s
 
