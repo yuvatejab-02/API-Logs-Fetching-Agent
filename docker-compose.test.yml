@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  # LocalStack for S3 storage
+  localstack:
+    image: localstack/localstack:latest
+    container_name: incident-analyzer-localstack-test
+    ports:
+      - "14566:4566"
+    environment:
+      - SERVICES=s3
+      - DEBUG=1
+      - DATA_DIR=/var/lib/localstack
+      - PERSISTENCE=1
+      - DEFAULT_REGION=us-east-1
+    volumes:
+      - "./localstack/volume:/var/lib/localstack"
+    networks:
+      - test-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Incident Log Analyzer
+  incident-analyzer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: incident-log-analyzer-test
+    environment:
+      # AWS Bedrock
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=us-east-1
+      - BEDROCK_MODEL_ID=us.anthropic.claude-3-5-sonnet-20241022-v2:0
+      
+      # SigNoz
+      - SIGNOZ_API_ENDPOINT=${SIGNOZ_API_ENDPOINT}
+      - SIGNOZ_API_KEY=${SIGNOZ_API_KEY}
+      
+      # S3 (LocalStack)
+      - S3_BUCKET_NAME=incident-logs-test
+      - USE_LOCALSTACK=true
+      - LOCALSTACK_ENDPOINT=http://localstack:4566
+      
+      # Application
+      - LOG_LEVEL=INFO
+      - POLLING_DURATION_MINUTES=2
+      - POLLING_INTERVAL_SECONDS=30
+    volumes:
+      - ./output:/app/output
+      - ./tests/test_data:/app/test_data
+    networks:
+      - test-network
+    depends_on:
+      localstack:
+        condition: service_healthy
+    command: >
+      sh -c "
+        echo 'Waiting for LocalStack...' &&
+        sleep 5 &&
+        python -m src.main --incident-file /app/test_data/sample_payloads.json
+      "
+
+networks:
+  test-network:
+    driver: bridge

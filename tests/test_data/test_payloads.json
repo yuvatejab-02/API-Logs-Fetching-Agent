@@ -1,0 +1,17 @@
+{
+  "test_incidents": [
+    {
+      "name": "Payment service 5xx errors",
+      "payload": {
+        "compslug": "companyname",
+        "Session_id": "7b3f2f30-0c4b-4c42-9f8f-7e3d2b8e2a61",
+        "incident_id": "INC_test_001",
+        "title": "Spike in 5xx errors for payments service",
+        "service": {
+          "id": "al89asf9asdhjfaslkdjfl",
+          "name": "payments-service"
+        }
+      }
+    }
+  ]
+}

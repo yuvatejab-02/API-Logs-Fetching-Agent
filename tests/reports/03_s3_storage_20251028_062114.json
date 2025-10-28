@@ -1,0 +1,109 @@
+{
+  "test_name": "03_s3_storage",
+  "timestamp": "2025-10-28T06:21:14.000660+00:00",
+  "status": "passed",
+  "input": {
+    "incident_id": "INC_test_001",
+    "logs_count": 3,
+    "file_type": "logs",
+    "sample_log": {
+      "timestamp": "2025-10-28T10:00:00.123Z",
+      "service": "payments-service",
+      "instance_id": "payments-service-xyz123",
+      "level": "ERROR",
+      "request_id": "req-abc-123",
+      "company_id": "testing",
+      "user_id": "user-1234",
+      "method": "GET",
+      "path": "/api/v1/products",
+      "status_code": 503,
+      "response_time_ms": 85,
+      "message": "GET /api/v1/products - 503 (85ms)"
+    }
+  },
+  "s3_operations": {
+    "upload": {
+      "s3_bucket": "incident-logs-test",
+      "s3_key": "incidents/INC_test_001/logs/20251028_062113.json",
+      "s3_uri": "s3://incident-logs-test/incidents/INC_test_001/logs/20251028_062113.json",
+      "logs_uploaded": 3
+    },
+    "list": {
+      "files_found": 1,
+      "file_details": [
+        {
+          "key": "incidents/INC_test_001/logs/20251028_062113.json",
+          "size": 1671,
+          "last_modified": "2025-10-28T06:21:13+00:00"
+        }
+      ]
+    },
+    "download": {
+      "logs_downloaded": 3,
+      "verified": true
+    }
+  },
+  "output": {
+    "metadata": {
+      "incident_id": "INC_test_001",
+      "uploaded_at": "2025-10-28T06:21:13.963920+00:00",
+      "log_count": 3,
+      "file_type": "logs",
+      "storage_backend": "localstack",
+      "source": "pytest",
+      "test_run": true,
+      "description": "Test upload for S3 storage validation"
+    },
+    "logs": [
+      {
+        "timestamp": "2025-10-28T10:00:00.123Z",
+        "service": "payments-service",
+        "instance_id": "payments-service-xyz123",
+        "level": "ERROR",
+        "request_id": "req-abc-123",
+        "company_id": "testing",
+        "user_id": "user-1234",
+        "method": "GET",
+        "path": "/api/v1/products",
+        "status_code": 503,
+        "response_time_ms": 85,
+        "message": "GET /api/v1/products - 503 (85ms)"
+      },
+      {
+        "timestamp": "2025-10-28T10:00:05.456Z",
+        "service": "payments-service",
+        "instance_id": "payments-service-xyz123",
+        "level": "ERROR",
+        "request_id": "req-def-456",
+        "company_id": "testing",
+        "user_id": "user-5678",
+        "method": "POST",
+        "path": "/api/v1/orders",
+        "status_code": 500,
+        "response_time_ms": 120,
+        "error_message": "Database connection timeout",
+        "message": "POST /api/v1/orders - 500 (120ms)"
+      },
+      {
+        "timestamp": "2025-10-28T10:00:10.789Z",
+        "service": "payments-service",
+        "instance_id": "payments-service-xyz123",
+        "level": "ERROR",
+        "request_id": "req-ghi-789",
+        "company_id": "testing",
+        "user_id": "user-9012",
+        "method": "DELETE",
+        "path": "/api/v1/inventory",
+        "status_code": 504,
+        "response_time_ms": 95,
+        "message": "DELETE /api/v1/inventory - 504 (95ms)"
+      }
+    ],
+    "total_logs": 3
+  },
+  "storage_info": {
+    "backend": "LocalStack",
+    "bucket": "incident-logs-test",
+    "is_local_environment": true
+  }
+}

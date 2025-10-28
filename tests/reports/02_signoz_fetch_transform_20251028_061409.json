@@ -1,0 +1,141 @@
+{
+  "test_name": "02_signoz_fetch_transform",
+  "timestamp": "2025-10-28T06:14:09.639013+00:00",
+  "status": "passed",
+  "input": {
+    "incident_id": "INC_test_001",
+    "filter_expression": "service.name = 'payments-service' AND http.status_code >= 500 AND http.status_code < 600 AND severity_text = 'ERROR'",
+    "signoz_query": {
+      "start": 1761628447159,
+      "end": 1761632047159,
+      "requestType": "raw",
+      "variables": {},
+      "compositeQuery": {
+        "queries": [
+          {
+            "type": "builder_query",
+            "spec": {
+              "name": "A",
+              "signal": "logs",
+              "filter": {
+                "expression": "service.name = 'payments-service' AND http.status_code >= 500 AND http.status_code < 600 AND severity_text = 'ERROR'"
+              },
+              "order": [
+                {
+                  "key": {
+                    "name": "timestamp"
+                  },
+                  "direction": "desc"
+                },
+                {
+                  "key": {
+                    "name": "id"
+                  },
+                  "direction": "desc"
+                }
+              ],
+              "offset": 0,
+              "limit": 1000
+            }
+          }
+        ]
+      }
+    }
+  },
+  "output": {
+    "raw_response_size": 282138,
+    "logs_fetched": 230,
+    "sample_log": {
+      "timestamp": "2025-10-28T06:07:34.80007552Z",
+      "service": "payments-service",
+      "instance_id": "payments-service-e52e343e",
+      "level": "ERROR",
+      "request_id": "fc13d04099f103e52607775774635189",
+      "company_id": "testing",
+      "user_id": "user-8637",
+      "method": "PUT",
+      "path": "/api/v1/orders",
+      "status_code": 503,
+      "response_time_ms": 67,
+      "message": "PUT /api/v1/orders - 503 (67ms)"
+    },
+    "transformed_logs": [
+      {
+        "timestamp": "2025-10-28T06:07:34.80007552Z",
+        "service": "payments-service",
+        "instance_id": "payments-service-e52e343e",
+        "level": "ERROR",
+        "request_id": "fc13d04099f103e52607775774635189",
+        "company_id": "testing",
+        "user_id": "user-8637",
+        "method": "PUT",
+        "path": "/api/v1/orders",
+        "status_code": 503,
+        "response_time_ms": 67,
+        "message": "PUT /api/v1/orders - 503 (67ms)"
+      },
+      {
+        "timestamp": "2025-10-28T06:07:34.799764736Z",
+        "service": "payments-service",
+        "instance_id": "payments-service-e52e343e",
+        "level": "ERROR",
+        "request_id": "fc13d04099f103e52607775774635189",
+        "company_id": "testing",
+        "user_id": "user-8637",
+        "method": "PUT",
+        "path": "/api/v1/orders",
+        "status_code": 503,
+        "error_message": "Connection refused",
+        "stack_trace": "at service.handler(handler.py:566)",
+        "message": "Request failed: Connection refused"
+      },
+      {
+        "timestamp": "2025-10-28T06:07:33.173719296Z",
+        "service": "payments-service",
+        "instance_id": "payments-service-e52e343e",
+        "level": "ERROR",
+        "request_id": "7cca8285b45ddeb11bdb29aa998d39bf",
+        "company_id": "testing",
+        "user_id": "user-5463",
+        "method": "GET",
+        "path": "/api/v1/users",
+        "status_code": 500,
+        "response_time_ms": 154,
+        "message": "GET /api/v1/users - 500 (154ms)"
+      },
+      {
+        "timestamp": "2025-10-28T06:07:33.1732224Z",
+        "service": "payments-service",
+        "instance_id": "payments-service-e52e343e",
+        "level": "ERROR",
+        "request_id": "7cca8285b45ddeb11bdb29aa998d39bf",
+        "company_id": "testing",
+        "user_id": "user-5463",
+        "method": "GET",
+        "path": "/api/v1/users",
+        "status_code": 500,
+        "error_message": "Resource not found",
+        "stack_trace": "at service.handler(handler.py:495)",
+        "message": "Request failed: Resource not found"
+      },
+      {
+        "timestamp": "2025-10-28T06:07:31.678797824Z",
+        "service": "payments-service",
+        "instance_id": "payments-service-e52e343e",
+        "level": "ERROR",
+        "request_id": "79cbefa2e7d2292cf2682177277ae719",
+        "company_id": "testing",
+        "user_id": "user-2186",
+        "method": "POST",
+        "path": "/api/v1/orders",
+        "status_code": 504,
+        "response_time_ms": 118,
+        "message": "POST /api/v1/orders - 504 (118ms)"
+      }
+    ]
+  },
+  "signoz_info": {
+    "endpoint": "https://selected-starling.us.signoz.cloud",
+    "api_version": "v5"
+  }
+}
