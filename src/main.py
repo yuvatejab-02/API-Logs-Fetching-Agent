@@ -10,7 +10,7 @@ import time
 from typing import Dict, Any, Optional
 from datetime import datetime, timezone, timedelta
 
-from .utils.logger import setup_logging, get_logger
+from .utils.logger import setup_logging, get_logger, print_banner
 from .utils.config import get_settings
 from .utils.perf_tracker import PerformanceTracker
 from .llm.query_generator import QueryGenerator
@@ -29,14 +29,15 @@ class IncidentLogAnalyzer:
     """
     Main orchestrator for incident log analysis with RAW data pipeline.
     
-    NEW Workflow:
-    1. Receive incident payload
+    Workflow:
+    1. Receive incident payload from SQS
     2. Generate SigNoz query via LLM with dry-run validation
     3. Automatic fallback to ALL mode if filter returns no results
     4. Fetch RAW logs, metrics, and traces (multi-signal)
     5. Upload RAW data to S3 with partitioned structure
     6. Generate EDAL datasource descriptors
-    7. No transformation - preserve original SigNoz response
+    7. Send completion message to SQS output queue
+    8. Continue listening indefinitely
     """
     
     def __init__(self):
@@ -64,12 +65,28 @@ class IncidentLogAnalyzer:
                 endpoint_url=self.settings.localstack_endpoint if self.settings.use_localstack else None
             )
         
+        # Print startup banner with configuration
+        banner_items = {
+            "mode": "RAW Multi-Signal Pipeline",
+            "environment": "LocalStack (Dev)" if self.settings.is_local_environment else "AWS (Production)",
+            "s3_bucket": self.settings.s3_bucket_name,
+            "signoz_endpoint": self.settings.signoz_api_endpoint,
+        }
+        
+        if self.settings.sqs_enabled:
+            banner_items["sqs_enabled"] = "Yes"
+            banner_items["input_queue"] = self.settings.sqs_input_queue_url or "Not configured"
+            banner_items["output_queue"] = self.settings.sqs_output_queue_url or "Not configured"
+        else:
+            banner_items["sqs_enabled"] = "No (Using test payload)"
+        
+        print_banner("🚀 API LOGS FETCHING AGENT STARTED", banner_items)
+        
         logger.info(
-            "incident_log_analyzer_initialized",
+            "api_fetcher_started_successfully",
             storage_backend="localstack" if self.settings.is_local_environment else "aws_s3",
             s3_bucket=self.settings.s3_bucket_name,
-            sqs_enabled=self.settings.sqs_enabled,
-            mode="raw_multi_signal"
+            sqs_enabled=self.settings.sqs_enabled
         )
     
     def process_incident(
@@ -82,13 +99,6 @@ class IncidentLogAnalyzer:
     ) -> Dict[str, Any]:
         """
         Process an incident end-to-end with RAW multi-signal pipeline.
-        
-        NEW Pipeline:
-        1. Generate SigNoz query with LLM (includes dry-run validation)
-        2. Automatic fallback to ALL mode if no results
-        3. Fetch RAW logs and traces (no transformation)
-        4. Upload RAW data to S3 with partitioned keys
-        5. Generate EDAL datasource descriptors
         
         Args:
             incident_payload: Incident data from alerting system
@@ -109,14 +119,20 @@ class IncidentLogAnalyzer:
             output_dir="performance_reports"
         )
         
+        # Print payload received banner
+        print_banner("📨 RECEIVED NEW PAYLOAD", {
+            "incident_id": incident_id,
+            "title": incident_payload.get("title", "N/A"),
+            "service": service_name,
+            "tenant": tenant,
+            "environment": environment,
+            "lookback_hours": f"{initial_lookback_hours} hour(s)"
+        })
+        
         logger.info(
-            "processing_incident_started",
+            "received_payload",
             incident_id=incident_id,
-            title=incident_payload.get("title"),
-            service=service_name,
-            tenant=tenant,
-            environment=environment,
-            lookback_hours=initial_lookback_hours
+            service=service_name
         )
         
         start_time = datetime.now(timezone.utc)
@@ -124,7 +140,7 @@ class IncidentLogAnalyzer:
         
         try:
             # Step 1: Generate separate filters for logs, metrics, and traces
-            logger.info("step_1_generating_filters_with_validation", incident_id=incident_id)
+            logger.info("generating_llm_query", incident_id=incident_id)
             
             perf_metrics = perf_tracker.start("llm", "query_generation")
             
@@ -147,14 +163,20 @@ class IncidentLogAnalyzer:
             metrics_config = query_result['filters']['metrics']
             fetch_mode = query_result['metadata'].get('fetch_mode', 'FILTERED')
             
+            # Print brief filter summary
+            filter_summary = {
+                "fetch_mode": fetch_mode,
+                "logs_filter": logs_filter[:80] + "..." if logs_filter and len(logs_filter) > 80 else logs_filter or "None",
+                "traces_filter": traces_filter[:80] + "..." if traces_filter and len(traces_filter) > 80 else traces_filter or "None",
+                "metrics": metrics_config.get('metric_name', 'signoz_calls_total') if metrics_config else 'signoz_calls_total'
+            }
+            
+            print_banner("✅ LLM QUERY GENERATED", filter_summary)
+            
             logger.info(
-                "filters_generated",
+                "llm_query_generated_successfully",
                 incident_id=incident_id,
-                logs_filter=logs_filter,
-                traces_filter=traces_filter,
-                has_metrics=metrics_config is not None,
-                fetch_mode=fetch_mode,
-                relaxation_history=query_result['metadata'].get('relaxation_history', [])
+                fetch_mode=fetch_mode
             )
             
             # Step 2: Calculate time window
@@ -164,17 +186,7 @@ class IncidentLogAnalyzer:
             end_ms = int(end_time_dt.timestamp() * 1000)
             
             # Step 3: Fetch RAW multi-signal data using concurrent fetching with pagination
-            logger.info("step_2_fetching_raw_multi_signal_data_concurrent", incident_id=incident_id)
-            
-            # Print LLM-generated filters
-            print(f"✅ LLM query generated successfully")
-            print(f"   Fetch Mode: {fetch_mode}")
-            if logs_filter:
-                print(f"   Logs Filter: {logs_filter[:100]}...")
-            if traces_filter:
-                print(f"   Traces Filter: {traces_filter[:100]}...")
-            print(f"   Metrics: {metrics_config.get('metric_name', 'signoz_calls_total') if metrics_config else 'signoz_calls_total'}")
-            print()
+            logger.info("fetching_data_from_signoz", incident_id=incident_id)
             
             # Extract metric config
             metric_name = "signoz_calls_total"
@@ -185,11 +197,6 @@ class IncidentLogAnalyzer:
                 metric_name = metrics_config.get("metric_name", metric_name)
                 aggregation = metrics_config.get("aggregation", aggregation)
                 group_by = metrics_config.get("group_by", [])
-            
-            print(f"🔄 Fetching data from SigNoz (concurrent + pagination)...")
-            print(f"   Time range: {initial_lookback_hours} hour(s) lookback")
-            print(f"   Signals: logs, traces, metrics")
-            print()
             
             # Fetch all signals concurrently with pagination (no limits)
             perf_metrics = perf_tracker.start("signoz", "fetch_all_signals_concurrent")
@@ -207,23 +214,36 @@ class IncidentLogAnalyzer:
                 incident_id=incident_id
             )
             
-            perf_tracker.finish(
-                perf_metrics,
-                logs_fetched=self._count_signal_rows(signals_data.get("logs", {})),
-                traces_fetched=self._count_signal_rows(signals_data.get("traces", {})),
-                metrics_fetched=self._count_metric_series(signals_data.get("metrics", {}))
-            )
-            
-            # Print fetch results
+            # Count fetched data
             log_count = self._count_signal_rows(signals_data.get("logs", {}))
             trace_count = self._count_signal_rows(signals_data.get("traces", {}))
             metric_count = self._count_metric_series(signals_data.get("metrics", {}))
             
-            print(f"✅ Data fetched successfully")
-            print(f"   Logs: {log_count} rows")
-            print(f"   Traces: {trace_count} rows")
-            print(f"   Metrics: {metric_count} series")
-            print()
+            perf_tracker.finish(
+                perf_metrics,
+                logs_fetched=log_count,
+                traces_fetched=trace_count,
+                metrics_fetched=metric_count
+            )
+            
+            # Print fetch results with performance
+            fetch_duration_ms = perf_metrics.get('duration_ms', 0) if isinstance(perf_metrics, dict) else 0
+            fetch_summary = {
+                "logs_fetched": f"{log_count} rows",
+                "traces_fetched": f"{trace_count} rows",
+                "metrics_fetched": f"{metric_count} series",
+                "fetch_duration": f"{fetch_duration_ms:.0f} ms" if fetch_duration_ms else "N/A"
+            }
+            
+            print_banner("✅ DATA FETCHED FROM SIGNOZ", fetch_summary)
+            
+            logger.info(
+                "data_fetched_successfully",
+                incident_id=incident_id,
+                logs=log_count,
+                traces=trace_count,
+                metrics=metric_count
+            )
             
             # Fallback logic for traces if no data with filter
             trace_count = self._count_signal_rows(signals_data.get("traces", {}))
@@ -255,22 +275,17 @@ class IncidentLogAnalyzer:
                     signals_data["traces"] = {"error": str(e)}
             
             # Step 4: Upload RAW data to S3 with partitioned structure
-            logger.info("step_3_uploading_raw_data_to_s3", incident_id=incident_id)
-            
-            print(f"📤 Uploading data to S3...")
-            print(f"   Bucket: {self.settings.s3_bucket_name}")
-            print()
+            logger.info("uploading_data_to_s3", incident_id=incident_id)
             
             sequence = 1
             for signal, data in signals_data.items():
                 # Check if data is valid (not an error response)
                 if isinstance(data, dict) and "error" in data and len(data) == 1:
                     logger.warning(
-                        f"skipping_{signal}_upload_due_to_error",
+                        f"skipping_{signal}_upload",
                         incident_id=incident_id,
                         error=data.get("error")
                     )
-                    print(f"   ⚠️  Skipping {signal} (error: {data.get('error')})")
                     continue
                 
                 try:
@@ -299,14 +314,18 @@ class IncidentLogAnalyzer:
                     perf_tracker.finish(perf_metrics, s3_key=s3_key)
                     
                     uploaded_files.append({"signal": signal, "s3_key": s3_key})
-                    logger.info(f"{signal}_uploaded_to_s3", incident_id=incident_id, s3_key=s3_key)
-                    print(f"   ✅ {signal.capitalize()} uploaded: {s3_key.split('/')[-1]}")
+                    logger.info(f"{signal}_uploaded", incident_id=incident_id)
                 except Exception as e:
                     perf_tracker.finish(perf_metrics, success=False, error=str(e))
-                    logger.error(f"failed_to_upload_{signal}", incident_id=incident_id, error=str(e), exc_info=True)
-                    print(f"   ❌ Failed to upload {signal}: {str(e)}")
+                    logger.error(f"failed_to_upload_{signal}", incident_id=incident_id, error=str(e))
             
-            print()
+            # Print upload summary
+            upload_summary = {
+                "bucket": self.settings.s3_bucket_name,
+                "files_uploaded": len(uploaded_files),
+                "signals": ", ".join([f["signal"] for f in uploaded_files])
+            }
+            print_banner("📤 DATA UPLOADED TO S3", upload_summary)
             
             # Step 5: Upload manifest
             manifest_data = {
@@ -650,26 +669,14 @@ class IncidentLogAnalyzer:
             logger.error("sqs_client_not_initialized")
             return
         
-        # Print startup banner
-        print("\n" + "="*80)
-        print("🚀 INCIDENT LOG ANALYZER - AUTOMATED PIPELINE")
-        print("="*80)
-        print(f"Mode: SQS Polling (Continuous)")
-        print(f"Input Queue: {self.settings.sqs_input_queue_url}")
-        print(f"Output Queue: {self.settings.sqs_output_queue_url}")
-        print(f"S3 Bucket: {self.settings.s3_bucket_name}")
-        print(f"Poll Interval: {self.settings.sqs_poll_interval}s")
-        print("="*80)
-        print()
-        print("✅ System ready and listening for incident payloads...")
-        print("📥 Waiting for messages from input queue...")
-        print()
-        print("💡 To send a test payload, run:")
-        print("   python send_test_message.py --incident-id YOUR_ID")
-        print()
-        print("="*80 + "\n")
+        # Print listening banner
+        print_banner("👂 LISTENING FOR NEW PAYLOADS", {
+            "input_queue": self.settings.sqs_input_queue_url,
+            "poll_interval": f"{self.settings.sqs_poll_interval}s",
+            "tip": "Run 'python send_test_message.py' to send a test payload"
+        })
         
-        logger.info("starting_sqs_polling")
+        logger.info("listening_for_sqs_messages")
         
         self.sqs_client.start_polling(
             message_handler=self.handle_sqs_message,
@@ -680,221 +687,40 @@ class IncidentLogAnalyzer:
 
 def main():
     """
-    Main entry point for production deployment.
+    Main entry point for production deployment - SQS Mode Only.
+    
+    The service runs indefinitely, listening to the SQS input queue for incident payloads.
+    Configuration is provided via environment variables.
     
     Usage:
-        # With incident file
-        python -m src.main --incident-file incident.json
-        
-        # With JSON string (from webhook/queue)
-        python -m src.main --incident-json '{"incident_id":"INC_001",...}'
-        
-        # With environment variables
-        export INCIDENT_PAYLOAD='{"incident_id":"INC_001",...}'
         python -m src.main
     """
-    import argparse
-    import os
-    
-    parser = argparse.ArgumentParser(
-        description="Incident Log Analyzer - Production Script",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  # From file
-  python -m src.main --incident-file /data/incident.json
-  
-  # From JSON string
-  python -m src.main --incident-json '{"incident_id":"INC_001","service":{"name":"payments"}}'
-  
-  # With custom lookback
-  python -m src.main --incident-file incident.json --lookback-hours 2
-  
-  # Disable compression
-  python -m src.main --incident-file incident.json --no-compress
-        """
-    )
-    
-    parser.add_argument(
-        "--mode",
-        type=str,
-        choices=["sqs", "file", "json"],
-        default="file",
-        help="Execution mode: sqs (poll from queue), file (read from file), json (parse JSON string)"
-    )
-    parser.add_argument(
-        "--incident-file",
-        type=str,
-        help="/tests/test_data/sample_payloads.json"
-    )
-    parser.add_argument(
-        "--incident-json",
-        type=str,
-        help=""
-    )
-    parser.add_argument(
-        "--lookback-hours",
-        type=int,
-        default=1,
-        help="Initial historical lookback window in hours (default: 1)"
-    )
-    parser.add_argument(
-        "--tenant",
-        type=str,
-        default="default",
-        help="Tenant identifier for S3 partitioning (default: default)"
-    )
-    parser.add_argument(
-        "--environment",
-        type=str,
-        default="prod",
-        choices=["prod", "stage", "dev"],
-        help="Environment (prod, stage, dev) for S3 partitioning (default: prod)"
-    )
-    parser.add_argument(
-        "--no-edal",
-        action="store_true",
-        help="Disable EDAL datasource descriptor generation"
-    )
-    
-    args = parser.parse_args()
-    
     # Initialize analyzer
     analyzer = IncidentLogAnalyzer()
     
-    # SQS Mode - Poll from queue
-    if args.mode == "sqs":
-        logger.info("starting_in_sqs_mode")
-        print("\n" + "="*80)
-        print("  🚨 INCIDENT LOG ANALYZER - SQS POLLING MODE")
-        print("="*80)
-        print(f"\nInput Queue: {analyzer.settings.sqs_input_queue_url}")
-        print(f"Output Queue: {analyzer.settings.sqs_output_queue_url}")
-        print(f"Poll Interval: {analyzer.settings.sqs_poll_interval}s")
-        
-        if analyzer.settings.sqs_max_empty_polls is None:
-            print(f"Polling Mode: CONTINUOUS (will run indefinitely)")
-        else:
-            print(f"Max Empty Polls: {analyzer.settings.sqs_max_empty_polls}")
-        
-        print("\n💡 Send messages using: python send_test_message.py")
-        print("💡 Check output queue: python check_output_queue.py")
-        print("\nWaiting for messages...")
-        print("="*80 + "\n")
-        
-        try:
-            analyzer.start_sqs_polling()
-        except KeyboardInterrupt:
-            print("\n\n⚠️  Polling interrupted by user\n")
-            sys.exit(130)
-        
-        sys.exit(0)
+    # Check if SQS is enabled
+    if not analyzer.settings.sqs_enabled or not analyzer.settings.sqs_input_queue_url:
+        logger.error("sqs_not_configured")
+        print("\n❌ ERROR: SQS is not configured!")
+        print("Please set the following environment variables:")
+        print("  - SQS_ENABLED=true")
+        print("  - SQS_INPUT_QUEUE_URL=<your-input-queue-url>")
+        print("  - SQS_OUTPUT_QUEUE_URL=<your-output-queue-url>")
+        sys.exit(1)
     
-    # File/JSON Mode - Get incident payload from various sources
-    incident_payload = None
-    
-    # Priority 1: Command line file
-    if args.incident_file:
-        try:
-            with open(args.incident_file, 'r') as f:
-                incident_payload = json.load(f)
-            logger.info("incident_payload_loaded_from_file", file=args.incident_file)
-        except Exception as e:
-            logger.error("failed_to_load_incident_file", error=str(e))
-            sys.exit(1)
-    
-    # Priority 2: Command line JSON
-    elif args.incident_json:
-        try:
-            incident_payload = json.loads(args.incident_json)
-            logger.info("incident_payload_loaded_from_json")
-        except Exception as e:
-            logger.error("failed_to_parse_incident_json", error=str(e))
-            sys.exit(1)
-    
-    # Priority 3: Environment variable
-    elif os.getenv('INCIDENT_PAYLOAD'):
-        try:
-            incident_payload = json.loads(os.getenv('INCIDENT_PAYLOAD'))
-            logger.info("incident_payload_loaded_from_env")
-        except Exception as e:
-            logger.error("failed_to_parse_env_payload", error=str(e))
-            sys.exit(1)
-    
-    # Priority 4: Default test payload (for testing only)
-    else:
-        incident_payload = {
-            "incident_id": "INC_default_test",
-            "title": "Test incident",
-            "service": {
-                "id": "test_service_id",
-                "name": "payments"
-            }
-        }
-        logger.warning("using_default_test_payload")
-    
-    # Display incident info
-    print("\n" + "="*80)
-    print("  🚨 INCIDENT LOG ANALYZER - RAW MULTI-SIGNAL MODE")
-    print("="*80)
-    print(f"\nIncident ID: {incident_payload.get('incident_id')}")
-    print(f"Title: {incident_payload.get('title', 'N/A')}")
-    print(f"Service: {incident_payload.get('service', {}).get('name', 'N/A')}")
-    print(f"Tenant: {args.tenant}")
-    print(f"Environment: {args.environment}")
-    print(f"Lookback: {args.lookback_hours} hour(s)")
-    print(f"EDAL Generation: {'Enabled' if not args.no_edal else 'Disabled'}")
-    print(f"Mode: RAW (No Transformation)")
-    print("\n" + "="*80 + "\n")
+    # Start SQS polling (runs indefinitely)
+    logger.info("starting_sqs_polling_mode")
     
     try:
-        result = analyzer.process_incident(
-            incident_payload=incident_payload,
-            initial_lookback_hours=args.lookback_hours,
-            tenant=args.tenant,
-            environment=args.environment,
-            generate_edal=not args.no_edal
-        )
-        
-        # Print results
-        print("\n" + "="*80)
-        if result["status"] == "completed":
-            print("  ✅ ANALYSIS COMPLETED SUCCESSFULLY")
-            print("="*80)
-            print(f"\n📊 Summary:")
-            print(f"   Processing Time: {result['processing_time_seconds']}s")
-            print(f"   Signals Fetched: {', '.join(result['signals']['fetched'])}")
-            print(f"   Files Uploaded: {result['storage']['upload_count']}")
-            print(f"\n🔍 Query Info:")
-            print(f"   Fetch Mode: {result['query_info']['fetch_mode']}")
-            print(f"   Logs Filter: {result['query_info']['logs_filter']}")
-            print(f"   Traces Filter: {result['query_info']['traces_filter']}")
-            if result['query_info'].get('metrics_config'):
-                print(f"   Metrics: {result['query_info']['metrics_config'].get('metric_name', 'N/A')}")
-            if result['query_info'].get('relaxation_history'):
-                print(f"   Relaxation Attempts: {len(result['query_info']['relaxation_history'])}")
-            print(f"\n💾 Storage:")
-            print(f"   S3 Bucket: {result['storage']['s3_bucket']}")
-            print(f"   Structure: {result['storage']['storage_structure']}")
-            if result['storage'].get('edal_descriptor_key'):
-                print(f"   EDAL Descriptor: {result['storage']['edal_descriptor_key']}")
-            print(f"\n📁 Uploaded Files:")
-            for file_info in result['storage']['uploaded_files']:
-                print(f"   - {file_info['signal']}: {file_info['s3_key']}")
-        else:
-            print("  ❌ ANALYSIS FAILED")
-            print("="*80)
-            print(f"\nError: {result.get('error', 'Unknown error')}")
-            if result.get('uploaded_files'):
-                print(f"\nPartially uploaded files: {len(result['uploaded_files'])}")
-        
-        print("\n" + "="*80 + "\n")
-        
-        sys.exit(0 if result["status"] == "completed" else 1)
-        
+        analyzer.start_sqs_polling()
     except KeyboardInterrupt:
-        print("\n\n⚠️  Analysis interrupted by user\n")
+        logger.info("polling_interrupted_by_user")
+        print("\n\n⚠️  Service stopped by user\n")
         sys.exit(130)
+    except Exception as e:
+        logger.error("unexpected_error_in_main_loop", error=str(e), exc_info=True)
+        print(f"\n\n❌ Unexpected error: {str(e)}\n")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

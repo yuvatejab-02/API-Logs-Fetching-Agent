@@ -35,6 +35,7 @@ services:
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_REGION=us-east-1
+      - BEDROCK_REGION=us-east-1
       - BEDROCK_MODEL_ID=us.anthropic.claude-3-5-sonnet-20241022-v2:0
       
       # SigNoz
@@ -55,8 +56,7 @@ services:
       
       # Application
       - LOG_LEVEL=INFO
-      - POLLING_DURATION_MINUTES=2
-      - POLLING_INTERVAL_SECONDS=30
+      - LOG_FORMAT=human
       - PYTHONUNBUFFERED=1
     volumes:
       - ./output:/app/output
@@ -71,7 +71,7 @@ services:
       sh -c "
         echo 'Waiting for LocalStack...' &&
         sleep 10 &&
-        python -m src.main --mode sqs
+        python -m src.main
       "
 
 networks:

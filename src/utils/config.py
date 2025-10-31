@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     aws_access_key_id: str
     aws_secret_access_key: str
     aws_region: str = "us-east-1"
+    bedrock_region: str = "us-east-1"  # Bedrock is only available in specific regions
     bedrock_model_id: str = "anthropic.claude-3-5-sonnet-20241022-v2:0"
     
     # SigNoz Configuration
@@ -38,8 +39,7 @@ class Settings(BaseSettings):
     
     # Application
     log_level: str = "INFO"
-    polling_duration_minutes: int = 30
-    polling_interval_seconds: int = 30
+    log_format: str = "human"  # "human" or "json"
     
     @property
     def is_local_environment(self) -> bool:

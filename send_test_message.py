@@ -23,7 +23,7 @@ SAMPLE_PAYLOAD = {
     "tenant": "default",
     "lookback_hours": 1,
     "severity": "high",
-    "description": "Payment service experiencing elevated 5xx error rates"
+    "description": "Payments service experiencing elevated 5xx error rates"
 }
 
 
@@ -47,11 +47,21 @@ def send_message(payload: dict, use_localstack: bool = True):
         queue_url = input("Enter SQS queue URL: ")
     
     try:
+        # Prepare send parameters
+        send_params = {
+            'QueueUrl': queue_url,
+            'MessageBody': json.dumps(payload)
+        }
+        
+        # Add FIFO-specific parameters if queue is FIFO
+        if queue_url.endswith('.fifo'):
+            incident_id = payload.get('incident_id', 'default')
+            send_params['MessageGroupId'] = incident_id
+            send_params['MessageDeduplicationId'] = f"{incident_id}_{int(datetime.now().timestamp() * 1000)}"
+            print(f"   FIFO Queue detected - using MessageGroupId: {incident_id}")
+        
         # Send message
-        response = sqs.send_message(
-            QueueUrl=queue_url,
-            MessageBody=json.dumps(payload)
-        )
+        response = sqs.send_message(**send_params)
         
         print(f"✅ Message sent successfully!")
         print(f"   Message ID: {response['MessageId']}")
@@ -79,6 +89,11 @@ def main():
         help="Service name (default: payments-service)"
     )
     parser.add_argument(
+        "--title",
+        type=str,
+        help="Incident title (default: Spike in 5xx errors for payments service)"
+    )
+    parser.add_argument(
         "--lookback-hours",
         type=int,
         default=1,
@@ -100,6 +115,9 @@ def main():
     
     if args.service:
         payload["service"]["name"] = args.service
+    
+    if args.title:
+        payload["title"] = args.title
     
     if args.lookback_hours:
         payload["lookback_hours"] = args.lookback_hours

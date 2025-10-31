@@ -1,0 +1,123 @@
+{
+    "family": "api-logs-fetching-agent-dev",
+    "taskRoleArn": "arn:aws:iam::528104389666:role/ecsTaskRole",
+    "executionRoleArn": "arn:aws:iam::528104389666:role/ecsTaskExecutionRole",
+    "networkMode": "awsvpc",
+    "containerDefinitions": [
+        {
+            "name": "api-logs-fetching-agent",
+            "image": "528104389666.dkr.ecr.ap-southeast-1.amazonaws.com/bugraid-dev-bugraid-app:api-logs-fetching-agent-dev-v9",
+            "cpu": 0,
+            "portMappings": [
+                {
+                    "containerPort": 8080,
+                    "hostPort": 8080,
+                    "protocol": "tcp",
+                    "name": "http"
+                }
+            ],
+            "essential": true,
+            "environment": [
+                {
+                    "name": "AWS_REGION",
+                    "value": "ap-southeast-1"
+                },
+                {
+                    "name": "ENVIRONMENT",
+                    "value": "development"
+                },
+                {
+                    "name": "SIGNOZ_API_ENDPOINT",
+                    "value": "https://sought-kodiak.us.signoz.cloud"
+                },
+                {
+                    "name": "BEDROCK_REGION",
+                    "value": "us-east-1"
+                },
+                {
+                    "name": "S3_BUCKET_NAME",
+                    "value": "api-dev-incident-data"
+                },
+                {
+                    "name": "BEDROCK_MODEL_ID",
+                    "value": "anthropic.claude-3-5-sonnet-20241022-v2:0"
+                },
+                {
+                    "name": "SQS_ENABLED",
+                    "value": "true"
+                },
+                {
+                    "name": "SQS_INPUT_QUEUE_URL",
+                    "value": "https://sqs.ap-southeast-1.amazonaws.com/528104389666/api-fetcher-dev-input-queue.fifo"
+                },
+                {
+                    "name": "SQS_OUTPUT_QUEUE_URL",
+                    "value": "https://sqs.ap-southeast-1.amazonaws.com/528104389666/api-fetcher-dev-output-queue.fifo"
+                },
+                {
+                    "name": "SQS_POLL_INTERVAL",
+                    "value": "20"
+                },
+                {
+                    "name": "LOG_FORMAT",
+                    "value": "json"
+                },
+                {
+                    "name": "LOG_LEVEL",
+                    "value": "INFO"
+                }
+            ],
+            "mountPoints": [],
+            "volumesFrom": [],
+            "secrets": [
+                {
+                    "name": "AWS_ACCESS_KEY_ID",
+                    "valueFrom": "arn:aws:ssm:ap-southeast-1:528104389666:parameter/dev/api-logs-fetching-agent/aws-access-key-id"
+                },
+                {
+                    "name": "AWS_SECRET_ACCESS_KEY",
+                    "valueFrom": "arn:aws:ssm:ap-southeast-1:528104389666:parameter/dev/api-logs-fetching-agent/aws-secret-access-key"
+                },
+                {
+                    "name": "SIGNOZ_API_KEY",
+                    "valueFrom": "arn:aws:ssm:ap-southeast-1:528104389666:parameter/dev/api-logs-fetching-agent/signoz-api-key"
+                }
+            ],
+            "stopTimeout": 30,
+            "ulimits": [
+                {
+                    "name": "nofile",
+                    "softLimit": 65536,
+                    "hardLimit": 65536
+                }
+            ],
+            "logConfiguration": {
+                "logDriver": "awslogs",
+                "options": {
+                    "awslogs-group": "/ecs/bugraid-dev-ai-ml/api-logs-fetching-agent",
+                    "awslogs-create-group": "true",
+                    "awslogs-region": "ap-southeast-1",
+                    "awslogs-stream-prefix": "ecs"
+                }
+            },
+            "healthCheck": {
+                "command": [
+                    "CMD-SHELL",
+                    "python -c \"import sys; sys.exit(0)\""
+                ],
+                "interval": 30,
+                "timeout": 5,
+                "retries": 3,
+                "startPeriod": 60
+            },
+            "systemControls": []
+        }
+    ],
+    "volumes": [],
+    "requiresCompatibilities": [
+        "FARGATE"
+    ],
+    "cpu": "1024",
+    "memory": "2048"
+}
+

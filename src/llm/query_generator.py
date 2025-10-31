@@ -1,12 +1,11 @@
 """LLM-based SigNoz query generator using AWS Bedrock."""
 import json
+import time
 from typing import Dict, Any, Tuple
-from datetime import datetime, timedelta
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
-import time
 
 from ..utils.config import get_settings
 from ..utils.logger import get_logger
@@ -25,7 +24,7 @@ class QueryGenerator:
         
         # Configure boto3 client with extended timeout for Bedrock
         bedrock_config = Config(
-            region_name=settings.aws_region,
+            region_name=settings.bedrock_region,
             read_timeout=300,  # 5 minutes
             connect_timeout=60,
             retries={'max_attempts': 3, 'mode': 'standard'}
@@ -34,7 +33,7 @@ class QueryGenerator:
         # Initialize Bedrock Runtime client
         self.client = boto3.client(
             service_name='bedrock-runtime',
-            region_name=settings.aws_region,
+            region_name=settings.bedrock_region,
             aws_access_key_id=settings.aws_access_key_id,
             aws_secret_access_key=settings.aws_secret_access_key,
             config=bedrock_config,
@@ -47,7 +46,7 @@ class QueryGenerator:
         logger.info(
             "bedrock_client_initialized",
             model_id=self.model_id,
-            region=settings.aws_region
+            region=settings.bedrock_region
         )
         
     def generate_signoz_query(
