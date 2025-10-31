@@ -1,16 +1,5 @@
 {
-  "test_cases": [
-
-     {
-      "name": "database_connection_failure",
-      "payload": {
-        "alert_id": "ALT_xyz789",
-        "severity": "critical",
-        "message": "Database connection pool exhausted",
-        "application": "user-service",
-        "error_pattern": "connection refused"
-      }
-    },
+  "test_incidents": [
     {
       "name": "5xx_spike_in_payments",
       "payload": {
@@ -22,16 +11,6 @@
           "id": "al89asf9asdhjfaslkdjfl",
           "name": "payments-service"
         }
-      }
-    },
-    {
-      "name": "high_latency_api",
-      "payload": {
-        "incident_id": "INC_abc123",
-        "title": "High latency on /api/v1/orders endpoint",
-        "service_name": "order-service",
-        "affected_route": "/api/v1/orders",
-        "metric_threshold": "response_time > 2000ms"
       }
     }
   ]

@@ -11,6 +11,7 @@ import time
 from ..utils.config import get_settings
 from ..utils.logger import get_logger
 from .prompts import SYSTEM_PROMPT, get_query_generation_prompt
+from .filter_relaxation import FilterRelaxation
 
 logger = get_logger(__name__)
 
@@ -52,52 +53,166 @@ class QueryGenerator:
     def generate_signoz_query(
         self, 
         incident_payload: Dict[str, Any],
-        lookback_hours: int = 1
+        lookback_hours: int = 1,
+        signoz_client = None,
+        enable_dry_run: bool = True,
+        max_relaxation_attempts: int = 2
     ) -> Dict[str, Any]:
-        """Generate a SigNoz API query from incident payload.
+        """Generate a SigNoz API query from incident payload with dry-run validation.
         
         Args:
             incident_payload: The incident data
             lookback_hours: How many hours back to search (default: 1)
+            signoz_client: Optional SigNozClient for dry-run validation
+            enable_dry_run: Whether to enable dry-run validation (default: True)
+            max_relaxation_attempts: Maximum filter relaxation attempts (default: 2)
             
         Returns:
-            Complete SigNoz API query payload
+            Complete SigNoz API query payload with metadata
             
         Raises:
             Exception: If LLM fails to generate valid query
         """
+        incident_id = incident_payload.get("incident_id", "unknown")
+        
         logger.info(
             "generating_signoz_query",
-            incident_id=incident_payload.get("incident_id"),
-            lookback_hours=lookback_hours
+            incident_id=incident_id,
+            lookback_hours=lookback_hours,
+            dry_run_enabled=enable_dry_run
         )
         
         try:
-            # Get filter expression from LLM
-            filter_expression, reasoning, key_attrs = self._get_filter_from_llm(
-                incident_payload
-            )
+            # Get separate filter expressions from LLM
+            llm_result = self._get_filter_from_llm(incident_payload)
             
-            # Build complete SigNoz query
-            signoz_query = self._build_signoz_payload(
-                filter_expression=filter_expression,
-                lookback_hours=lookback_hours
-            )
+            logs_filter = llm_result["logs_filter"]
+            traces_filter = llm_result["traces_filter"]
+            metrics_config = llm_result["metrics_config"]
+            reasoning = llm_result["reasoning"]
+            key_attrs = llm_result["key_attributes"]
+            
+            # Calculate time window for dry-run
+            end_time = datetime.now(timezone.utc)
+            start_time = end_time - timedelta(hours=lookback_hours)
+            start_ms = int(start_time.timestamp() * 1000)
+            end_ms = int(end_time.timestamp() * 1000)
+            
+            fetch_mode = "FILTERED"
+            relaxation_history = []
+            final_logs_filter = logs_filter
+            final_traces_filter = traces_filter
+            
+            # Dry-run validation for logs filter (if enabled)
+            if enable_dry_run and signoz_client and logs_filter:
+                log_count = signoz_client.dry_run_query(
+                    filter_expression=logs_filter,
+                    start_ms=start_ms,
+                    end_ms=end_ms,
+                    limit=10,
+                    incident_id=incident_id
+                )
+                
+                logger.info(
+                    "dry_run_logs_filter_result",
+                    incident_id=incident_id,
+                    log_count=log_count,
+                    logs_filter=logs_filter
+                )
+                
+                # If no results, try relaxing the logs filter
+                if log_count == 0:
+                    for attempt in range(max_relaxation_attempts):
+                        relaxed_filter, strategy = FilterRelaxation.relax_filter(
+                            logs_filter, attempt
+                        )
+                        
+                        relaxation_history.append({
+                            "attempt": attempt + 1,
+                            "strategy": strategy,
+                            "filter": relaxed_filter
+                        })
+                        
+                        if relaxed_filter:
+                            log_count = signoz_client.dry_run_query(
+                                filter_expression=relaxed_filter,
+                                start_ms=start_ms,
+                                end_ms=end_ms,
+                                limit=10,
+                                incident_id=incident_id
+                            )
+                            
+                            logger.info(
+                                "dry_run_relaxation_attempt",
+                                incident_id=incident_id,
+                                attempt=attempt + 1,
+                                strategy=strategy,
+                                log_count=log_count,
+                                relaxed_filter=relaxed_filter
+                            )
+                            
+                            if log_count > 0:
+                                final_logs_filter = relaxed_filter
+                                fetch_mode = f"RELAXED_{strategy.upper()}"
+                                break
+                        else:
+                            # Empty filter means ALL mode
+                            final_logs_filter = ""
+                            final_traces_filter = ""
+                            fetch_mode = "ALL_SIGNALS"
+                            break
+                    
+                    # If still no results after all attempts, fallback to ALL mode
+                    if log_count == 0:
+                        logger.warning(
+                            "fallback_to_all_signals_mode",
+                            incident_id=incident_id,
+                            original_logs_filter=logs_filter,
+                            relaxation_attempts=len(relaxation_history)
+                        )
+                        final_logs_filter = ""
+                        final_traces_filter = ""
+                        fetch_mode = "ALL_SIGNALS"
+                else:
+                    logger.info(
+                        "dry_run_success_using_original_filters",
+                        incident_id=incident_id,
+                        log_count=log_count
+                    )
             
             logger.info(
                 "query_generated_successfully",
-                filter_expression=filter_expression,
+                incident_id=incident_id,
+                logs_filter=final_logs_filter,
+                traces_filter=final_traces_filter,
+                has_metrics=metrics_config is not None,
+                fetch_mode=fetch_mode,
                 reasoning=reasoning,
                 key_attributes=key_attrs
             )
             
             return {
-                "query": signoz_query,
+                "filters": {
+                    "logs": final_logs_filter,
+                    "traces": final_traces_filter,
+                    "metrics": metrics_config
+                },
                 "metadata": {
-                    "filter_expression": filter_expression,
+                    "original_filters": {
+                        "logs": logs_filter,
+                        "traces": traces_filter,
+                        "metrics": metrics_config
+                    },
+                    "fetch_mode": fetch_mode,
                     "reasoning": reasoning,
                     "key_attributes": key_attrs,
-                    "generated_at": datetime.utcnow().isoformat()
+                    "relaxation_history": relaxation_history,
+                    "time_window": {
+                        "start_ms": start_ms,
+                        "end_ms": end_ms,
+                        "lookback_hours": lookback_hours
+                    },
+                    "generated_at": datetime.now(timezone.utc).isoformat()
                 }
             }
             
@@ -105,28 +220,29 @@ class QueryGenerator:
             logger.error(
                 "query_generation_failed",
                 error=str(e),
-                incident_payload=incident_payload
+                incident_payload=incident_payload,
+                exc_info=True
             )
             raise
     
     def _get_filter_from_llm(
         self, 
         incident_payload: Dict[str, Any]
-    ) -> Tuple[str, str, list]:
-        """Use Claude via Bedrock to analyze payload and generate filter expression.
+    ) -> Dict[str, Any]:
+        """Use Claude via Bedrock to analyze payload and generate filter expressions.
         
         Args:
             incident_payload: The incident data
             
         Returns:
-            Tuple of (filter_expression, reasoning, key_attributes)
+            Dictionary containing logs_filter, traces_filter, metrics_config, reasoning, key_attributes
         """
         user_prompt = get_query_generation_prompt(incident_payload)
         
         # Prepare Bedrock request body
         request_body = {
             "anthropic_version": self.anthropic_version,
-            "max_tokens": 1024,
+            "max_tokens": 1500,  # Increased for multiple filters
             "temperature": 0.3,  # Lower temperature for more deterministic output
             "system": SYSTEM_PROMPT,
             "messages": [
@@ -166,11 +282,17 @@ class QueryGenerator:
             # Parse JSON response
             result = json.loads(response_text)
             
-            return (
-                result["filter_expression"],
-                result["reasoning"],
-                result["key_attributes"]
-            )
+            # Validate required fields
+            if "logs_filter" not in result or "traces_filter" not in result:
+                raise Exception("LLM response missing required filter fields")
+            
+            return {
+                "logs_filter": result.get("logs_filter", ""),
+                "traces_filter": result.get("traces_filter", ""),
+                "metrics_config": result.get("metrics_config"),
+                "reasoning": result.get("reasoning", ""),
+                "key_attributes": result.get("key_attributes", [])
+            }
             
         except ClientError as e:
             error_code = e.response['Error']['Code']
@@ -193,57 +315,3 @@ class QueryGenerator:
         except Exception as e:
             logger.error("llm_api_error", error=str(e))
             raise
-    
-    def _build_signoz_payload(
-        self, 
-        filter_expression: str,
-        lookback_hours: int = 1,
-        limit: int = 1000
-    ) -> Dict[str, Any]:
-        """Build complete SigNoz API payload.
-        
-        Args:
-            filter_expression: The filter expression from LLM
-            lookback_hours: Hours to look back
-            limit: Maximum logs to fetch
-            
-        Returns:
-            Complete SigNoz API payload
-        """
-        
-        # Convert to epoch milliseconds
-        end_time = datetime.now(timezone.utc)
-        start_time = end_time - timedelta(hours=lookback_hours)
-        
-        return {
-            "start": int(start_time.timestamp() * 1000),
-            "end": int(end_time.timestamp() * 1000),
-            "requestType": "raw",
-            "variables": {},
-            "compositeQuery": {
-                "queries": [
-                    {
-                        "type": "builder_query",
-                        "spec": {
-                            "name": "A",
-                            "signal": "logs",
-                            "filter": {
-                                "expression": filter_expression
-                            },
-                            "order": [
-                                {
-                                    "key": {"name": "timestamp"},
-                                    "direction": "desc"
-                                },
-                                {
-                                    "key": {"name": "id"},
-                                    "direction": "desc"
-                                }
-                            ],
-                            "offset": 0,
-                            "limit": limit
-                        }
-                    }
-                ]
-            }
-        }

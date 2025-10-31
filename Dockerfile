@@ -20,8 +20,8 @@ COPY src/ ./src/
 
 # Copy .env file (optional, can use environment variables instead)
 
-# Create output directory
-RUN mkdir -p /app/output
+# Create output and performance reports directories
+RUN mkdir -p /app/output /app/performance_reports
 
 # Set Python path
 ENV PYTHONPATH=/app

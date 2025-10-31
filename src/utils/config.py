@@ -28,6 +28,14 @@ class Settings(BaseSettings):
     localstack_endpoint: Optional[str] = None
     use_localstack: bool = False
     
+    # SQS Configuration
+    sqs_input_queue_url: Optional[str] = None
+    sqs_output_queue_url: Optional[str] = None
+    sqs_enabled: bool = False
+    sqs_poll_interval: int = 20
+    sqs_max_empty_polls: Optional[int] = None  # None = infinite polling
+    sqs_visibility_timeout: int = 300
+    
     # Application
     log_level: str = "INFO"
     polling_duration_minutes: int = 30

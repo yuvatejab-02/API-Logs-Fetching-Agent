@@ -1,0 +1,100 @@
+{
+  "metadata": {
+    "incident_id": "AUTO_TEST_001",
+    "saved_at": "2025-10-30T16:13:11.347942+00:00",
+    "log_count": 1,
+    "is_final_aggregated": false,
+    "type": "processing_summary"
+  },
+  "logs": [
+    {
+      "incident_id": "AUTO_TEST_001",
+      "signals_fetched": [
+        "logs",
+        "traces",
+        "metrics"
+      ],
+      "uploaded_files": [
+        {
+          "signal": "logs",
+          "s3_key": "raw/prod/default/payment-service/logs/date=2025-10-30/hour=16/incident_id=AUTO_TEST_001/window=1761837147663-1761840747663/seq=00001/part-0001.json.gz"
+        },
+        {
+          "signal": "traces",
+          "s3_key": "raw/prod/default/payment-service/traces/date=2025-10-30/hour=16/incident_id=AUTO_TEST_001/window=1761837147663-1761840747663/seq=00001/part-0001.json.gz"
+        },
+        {
+          "signal": "metrics",
+          "s3_key": "raw/prod/default/payment-service/metrics/date=2025-10-30/hour=16/incident_id=AUTO_TEST_001/window=1761837147663-1761840747663/seq=00001/part-0001.json.gz"
+        }
+      ],
+      "manifest": {
+        "incident_id": "AUTO_TEST_001",
+        "service": "payment-service",
+        "tenant": "default",
+        "environment": "prod",
+        "time_range": {
+          "start_ms": 1761837147663,
+          "end_ms": 1761840747663,
+          "lookback_hours": 1
+        },
+        "query_info": {
+          "original_filters": {
+            "logs": "service.name = 'payment-service' AND http.status_code >= 500 AND http.status_code < 600",
+            "traces": "resource.service.name = 'payment-service' AND attribute.http.status_code >= 500 AND attribute.http.status_code < 600",
+            "metrics": {
+              "metric_name": "signoz_calls_total",
+              "aggregation": "rate",
+              "filter_expression": "",
+              "group_by": [
+                "service.name",
+                "status_code"
+              ]
+            }
+          },
+          "fetch_mode": "ALL_SIGNALS",
+          "reasoning": "Incident indicates 5xx errors in payment-service. Using status code range 500-599 to capture all server errors. For metrics, using call rate grouped by service and status code to show error ratio. Severity is implied by status code, so severity_text filter isn't needed.",
+          "key_attributes": [
+            "service.name",
+            "http.status_code"
+          ],
+          "relaxation_history": [
+            {
+              "attempt": 1,
+              "strategy": "remove_status_code",
+              "filter": "service.name = 'payment-service'"
+            },
+            {
+              "attempt": 2,
+              "strategy": "service_and_severity_only",
+              "filter": "service.name = 'payment-service'"
+            }
+          ],
+          "time_window": {
+            "start_ms": 1761837144499,
+            "end_ms": 1761840744499,
+            "lookback_hours": 1
+          },
+          "generated_at": "2025-10-30T16:12:27.662776+00:00"
+        },
+        "uploaded_files": [
+          {
+            "signal": "logs",
+            "s3_key": "raw/prod/default/payment-service/logs/date=2025-10-30/hour=16/incident_id=AUTO_TEST_001/window=1761837147663-1761840747663/seq=00001/part-0001.json.gz"
+          },
+          {
+            "signal": "traces",
+            "s3_key": "raw/prod/default/payment-service/traces/date=2025-10-30/hour=16/incident_id=AUTO_TEST_001/window=1761837147663-1761840747663/seq=00001/part-0001.json.gz"
+          },
+          {
+            "signal": "metrics",
+            "s3_key": "raw/prod/default/payment-service/metrics/date=2025-10-30/hour=16/incident_id=AUTO_TEST_001/window=1761837147663-1761840747663/seq=00001/part-0001.json.gz"
+          }
+        ],
+        "upload_count": 3,
+        "processing_time_seconds": 52
+      },
+      "edal_descriptor_key": "config/prod/default/edal/datasources_20251030_161311.json"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+# Performance Reports
+# Add this to your .gitignore file
+
+# Performance tracking reports (optional - keep if you want to track in git)
+performance_reports/*.json
+
+# Keep the directory but ignore the reports
+!performance_reports/.gitkeep
+
+

@@ -1,20 +1,21 @@
 version: '3.8'
 
 services:
-  # LocalStack for S3 storage
+  # LocalStack for S3 and SQS
   localstack:
     image: localstack/localstack:latest
     container_name: incident-analyzer-localstack-test
     ports:
       - "14566:4566"
     environment:
-      - SERVICES=s3
+      - SERVICES=s3,sqs
       - DEBUG=1
       - DATA_DIR=/var/lib/localstack
       - PERSISTENCE=1
       - DEFAULT_REGION=us-east-1
     volumes:
       - "./localstack/volume:/var/lib/localstack"
+      - "./localstack/init-sqs.sh:/etc/localstack/init/ready.d/init-sqs.sh"
     networks:
       - test-network
     healthcheck:
@@ -45,13 +46,22 @@ services:
       - USE_LOCALSTACK=true
       - LOCALSTACK_ENDPOINT=http://localstack:4566
       
+      # SQS (LocalStack)
+      - SQS_ENABLED=true
+      - SQS_INPUT_QUEUE_URL=http://localstack:4566/000000000000/incident-input-queue
+      - SQS_OUTPUT_QUEUE_URL=http://localstack:4566/000000000000/incident-output-queue
+      - SQS_POLL_INTERVAL=20
+      # SQS_MAX_EMPTY_POLLS not set = infinite polling (continuous)
+      
       # Application
       - LOG_LEVEL=INFO
       - POLLING_DURATION_MINUTES=2
       - POLLING_INTERVAL_SECONDS=30
+      - PYTHONUNBUFFERED=1
     volumes:
       - ./output:/app/output
       - ./tests/test_data:/app/test_data
+      - ./performance_reports:/app/performance_reports
     networks:
       - test-network
     depends_on:
@@ -60,8 +70,8 @@ services:
     command: >
       sh -c "
         echo 'Waiting for LocalStack...' &&
-        sleep 5 &&
-        python -m src.main --incident-file /app/test_data/sample_payloads.json
+        sleep 10 &&
+        python -m src.main --mode sqs
       "
 
 networks:
