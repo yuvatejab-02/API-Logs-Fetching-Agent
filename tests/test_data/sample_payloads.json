@@ -3,13 +3,28 @@
     {
       "name": "5xx_spike_in_payments",
       "payload": {
-        "compslug": "companyname",
-        "Session_id": "7b3f2f30-0c4b-4c42-9f8f-7e3d2b8e2a61",
-        "incident_id": "INC_9d0f2a3a",
-        "title": "Spike in 5xx for payments",
-        "service": {
-          "id": "al89asf9asdhjfaslkdjfl",
-          "name": "payments-service"
+        "job_type": "incident-data-fetch",
+        "data_sources": [
+          {
+            "source_type": "signoz",
+            "connection_info": {
+              "api_endpoint": "https://test-signoz.us.signoz.cloud"
+            },
+            "auth_config": {
+              "auth_type": "api_key",
+              "api_key": "test_api_key_12345"
+            }
+          }
+        ],
+        "incident": {
+          "incident_id": "INC_9d0f2a3a",
+          "company_id": "companyname",
+          "title": "Spike in 5xx for payments",
+          "service": {
+            "name": "payments-service"
+          },
+          "environment": "prod",
+          "lookback_hours": 1
         }
       }
     }
