@@ -5,7 +5,6 @@ Handles: SQS → Payload → LLM Query → Multi-Signal Fetch → Raw S3 Upload 
 """
 import sys
 import json
-import os
 import time
 from typing import Dict, Any, Optional
 from datetime import datetime, timezone, timedelta
@@ -44,25 +43,28 @@ class IncidentLogAnalyzer:
         """Initialize the analyzer with all components."""
         self.settings = get_settings()
         
-        # Initialize components
+        # Initialize components that don't require SigNoz credentials
         self.query_generator = QueryGenerator()
-        self.signoz_client = SigNozClient()
-        self.signoz_fetcher = SigNozFetcher(
-            api_endpoint=self.settings.signoz_api_endpoint,
-            api_key=self.settings.signoz_api_key
-        )
         self.raw_s3_storage = RawS3Storage()
         self.edal_generator = EDALDescriptorGenerator()
         self.local_storage = LocalStorage()
         
+        # SigNoz client and fetcher will be initialized per-message with credentials from payload
+        self.signoz_client = None
+        self.signoz_fetcher = None
+        
         # Initialize SQS client if enabled
         self.sqs_client = None
         if self.settings.sqs_enabled and self.settings.sqs_input_queue_url:
+            # Use sqs_endpoint_url if provided, otherwise fall back to localstack_endpoint for backward compatibility
+            sqs_endpoint = self.settings.sqs_endpoint_url or (
+                self.settings.localstack_endpoint if self.settings.use_localstack else None
+            )
             self.sqs_client = SQSClient(
                 input_queue_url=self.settings.sqs_input_queue_url,
                 output_queue_url=self.settings.sqs_output_queue_url,
                 region=self.settings.aws_region,
-                endpoint_url=self.settings.localstack_endpoint if self.settings.use_localstack else None
+                endpoint_url=sqs_endpoint
             )
         
         # Print startup banner with configuration
@@ -70,7 +72,7 @@ class IncidentLogAnalyzer:
             "mode": "RAW Multi-Signal Pipeline",
             "environment": "LocalStack (Dev)" if self.settings.is_local_environment else "AWS (Production)",
             "s3_bucket": self.settings.s3_bucket_name,
-            "signoz_endpoint": self.settings.signoz_api_endpoint,
+            "signoz_credentials": "Loaded from payload",
         }
         
         if self.settings.sqs_enabled:
@@ -92,6 +94,8 @@ class IncidentLogAnalyzer:
     def process_incident(
         self,
         incident_payload: Dict[str, Any],
+        signoz_api_endpoint: str,
+        signoz_api_key: str,
         initial_lookback_hours: int = 1,
         tenant: str = "default",
         environment: str = "prod",
@@ -102,6 +106,8 @@ class IncidentLogAnalyzer:
         
         Args:
             incident_payload: Incident data from alerting system
+            signoz_api_endpoint: SigNoz API endpoint URL from payload
+            signoz_api_key: SigNoz API key from payload
             initial_lookback_hours: Historical lookback window (default: 1 hour)
             tenant: Tenant identifier (default: "default")
             environment: Environment (prod, stage, dev)
@@ -112,6 +118,10 @@ class IncidentLogAnalyzer:
         """
         incident_id = incident_payload.get("incident_id", "unknown")
         service_name = incident_payload.get("service", {}).get("name", "unknown")
+        
+        # Initialize SigNoz clients with credentials from payload
+        signoz_client = SigNozClient(api_endpoint=signoz_api_endpoint, api_key=signoz_api_key)
+        signoz_fetcher = SigNozFetcher(api_endpoint=signoz_api_endpoint, api_key=signoz_api_key)
         
         # Initialize performance tracker
         perf_tracker = PerformanceTracker(
@@ -146,8 +156,8 @@ class IncidentLogAnalyzer:
             
             query_result = self.query_generator.generate_signoz_query(
                 incident_payload=incident_payload,
-            lookback_hours=initial_lookback_hours,
-                signoz_client=self.signoz_client,
+                lookback_hours=initial_lookback_hours,
+                signoz_client=signoz_client,
                 enable_dry_run=True
             )
             
@@ -201,7 +211,7 @@ class IncidentLogAnalyzer:
             # Fetch all signals concurrently with pagination (no limits)
             perf_metrics = perf_tracker.start("signoz", "fetch_all_signals_concurrent")
             
-            signals_data = self.signoz_fetcher.fetch_all_signals_concurrent(
+            signals_data = signoz_fetcher.fetch_all_signals_concurrent(
                 start_ms=start_ms,
                 end_ms=end_ms,
                 logs_filter=logs_filter if fetch_mode != "ALL_SIGNALS" else "",
@@ -256,7 +266,7 @@ class IncidentLogAnalyzer:
                 
                 # Retry traces without filter using pagination
                 try:
-                    signals_data["traces"] = self.signoz_fetcher.fetch_traces_paginated(
+                    signals_data["traces"] = signoz_fetcher.fetch_traces_paginated(
                         start_ms=start_ms,
                         end_ms=end_ms,
                         filter_expression="",  # Empty filter = fetch ALL
@@ -537,100 +547,118 @@ class IncidentLogAnalyzer:
         """Handle a single SQS message.
         
         Args:
-            payload: Validated incident payload from SQS
+            payload: Raw payload from SQS (will be validated)
             
         Returns:
             True if processing successful, False otherwise
         """
-        incident_id = payload.get("incident_id", "unknown")
         start_time = time.time()
         
         try:
-            # Extract parameters from payload
-            lookback_hours = payload.get("lookback_hours", 1)
-            tenant = payload.get("tenant", "default")
-            environment = payload.get("environment", "prod")
-            service_name = payload.get("service", {}).get("name", "unknown")
+            # Import validation function
+            from .utils.sqs_schema import validate_and_extract_payload
             
-            # Print incoming payload
+            # Validate payload and extract SigNoz credentials
+            incident, signoz_api_endpoint, signoz_api_key = validate_and_extract_payload(payload)
+            
+            # Extract parameters from incident section
+            incident_id = incident.get("incident_id", "unknown")
+            company_id = incident.get("company_id", "default")
+            lookback_hours = incident.get("lookback_hours", 1)
+            environment = incident.get("environment", "prod")
+            service_name = incident.get("service", {}).get("name", "unknown")
+            
+            # Use company_id as tenant
+            tenant = company_id
+            
+            # Print incoming payload (sanitized - hide API key)
             print("\n" + "="*80)
             print("📥 INCOMING INCIDENT PAYLOAD")
             print("="*80)
-            print(json.dumps(payload, indent=2))
+            sanitized_payload = json.loads(json.dumps(payload))
+            if "data_sources" in sanitized_payload:
+                for ds in sanitized_payload["data_sources"]:
+                    if "auth_config" in ds and "api_key" in ds["auth_config"]:
+                        ds["auth_config"]["api_key"] = "***REDACTED***"
+            print(json.dumps(sanitized_payload, indent=2))
             print("="*80)
             print(f"✅ Payload validated successfully")
             print(f"   Incident ID: {incident_id}")
+            print(f"   Company ID: {company_id}")
             print(f"   Service: {service_name}")
             print(f"   Environment: {environment}")
             print(f"   Lookback: {lookback_hours} hour(s)")
+            print(f"   SigNoz Endpoint: {signoz_api_endpoint}")
             print("="*80 + "\n")
             
             logger.info(
                 "processing_sqs_message",
                 incident_id=incident_id,
+                company_id=company_id,
                 tenant=tenant,
-                environment=environment
+                environment=environment,
+                signoz_endpoint=signoz_api_endpoint
             )
             
             print(f"🤖 Generating LLM filter query for incident {incident_id}...")
             
-            # Process incident
+            # Process incident with credentials from payload
             result = self.process_incident(
-                incident_payload=payload,
+                incident_payload=incident,
+                signoz_api_endpoint=signoz_api_endpoint,
+                signoz_api_key=signoz_api_key,
                 initial_lookback_hours=lookback_hours,
                 tenant=tenant,
                 environment=environment,
                 generate_edal=True
             )
             
-            # Prepare S3 keys for completion message
-            s3_keys = {}
+            # Prepare S3 URLs for completion message
+            s3_urls = {}
             for file_info in result.get('storage', {}).get('uploaded_files', []):
                 signal = file_info.get('signal')
-                if signal:
-                    s3_keys[signal] = file_info.get('s3_key', '')
+                s3_key = file_info.get('s3_key', '')
+                if signal and s3_key:
+                    # Convert S3 key to full URL
+                    s3_urls[signal] = self.raw_s3_storage.get_s3_url_from_key(s3_key)
             
             # Print S3 storage details
             print("\n" + "="*80)
             print("💾 S3 STORAGE DETAILS")
             print("="*80)
             print(f"Bucket: {self.settings.s3_bucket_name}")
-            print(f"Signals stored: {', '.join(s3_keys.keys())}")
-            for signal, key in s3_keys.items():
-                print(f"   {signal}: {key}")
+            print(f"Signals stored: {', '.join(s3_urls.keys())}")
+            for signal, url in s3_urls.items():
+                print(f"   {signal}: {url}")
             if result.get('storage', {}).get('edal_descriptor_key'):
                 print(f"EDAL Descriptor: {result.get('storage', {}).get('edal_descriptor_key')}")
             print("="*80 + "\n")
             
-            # Send completion message to output queue
-            completion_payload = None
+            # Send completion message to output queue in new format
             if self.sqs_client:
-                completion_payload = {
-                    "incident_id": incident_id,
-                    "status": result['status'],
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "processing_time_seconds": round(time.time() - start_time, 2),
-                    "signals_fetched": result.get('signals', {}).get('fetched', []),
-                    "s3_keys": s3_keys,
-                    "edal_descriptor_key": result.get('storage', {}).get('edal_descriptor_key'),
-                    "error_message": result.get('error') if result['status'] != 'completed' else None
-                }
-                
                 self.sqs_client.send_completion_message(
                     incident_id=incident_id,
-                    status=result['status'],
-                    timestamp=completion_payload['timestamp'],
-                    processing_time=completion_payload['processing_time_seconds'],
-                    signals_fetched=completion_payload['signals_fetched'],
-                    s3_keys=s3_keys,
-                    edal_descriptor_key=result.get('storage', {}).get('edal_descriptor_key'),
-                    error_message=completion_payload.get('error_message')
+                    company_id=company_id,
+                    service=service_name,
+                    environment=environment,
+                    s3_urls=s3_urls
                 )
                 
                 # Print completion message
                 print("\n" + "="*80)
                 print("✅ JOB COMPLETED - OUTPUT QUEUE MESSAGE")
                 print("="*80)
+                completion_payload = {
+                    "incident": {
+                        "incident_id": incident_id,
+                        "company_id": company_id,
+                        "service": service_name,
+                        "env": environment
+                    },
+                    "sources": {
+                        "signoz": s3_urls
+                    }
+                }
                 print(json.dumps(completion_payload, indent=2))
                 print("="*80)
                 print(f"📤 Completion message sent to output queue")
@@ -642,24 +670,12 @@ class IncidentLogAnalyzer:
         except Exception as e:
             logger.error(
                 "sqs_message_handling_failed",
-                incident_id=incident_id,
+                incident_id=incident_id if 'incident_id' in locals() else "unknown",
                 error=str(e)
             )
             
-            # Send failure message to output queue
-            if self.sqs_client:
-                try:
-                    self.sqs_client.send_completion_message(
-                        incident_id=incident_id,
-                        status="failed",
-                        timestamp=datetime.now(timezone.utc).isoformat(),
-                        processing_time=time.time() - start_time,
-                        signals_fetched=[],
-                        s3_keys={},
-                        error_message=str(e)
-                    )
-                except Exception as send_error:
-                    logger.error("failed_to_send_error_completion", error=str(send_error))
+            # Note: For failures, we don't send output messages in the new format
+            # The absence of a message indicates failure
             
             return False
     
