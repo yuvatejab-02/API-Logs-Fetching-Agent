@@ -1,6 +1,5 @@
 """LLM-based SigNoz query generator using AWS Bedrock."""
 import json
-import time
 from typing import Dict, Any, Tuple
 from datetime import datetime, timedelta, timezone
 import boto3
