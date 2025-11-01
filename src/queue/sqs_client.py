@@ -90,11 +90,23 @@ class SQSClient:
             return messages
             
         except ClientError as e:
-            logger.error(
-                "sqs_poll_failed",
-                error=str(e),
-                queue=self.input_queue_url
-            )
+            error_code = e.response.get('Error', {}).get('Code', '')
+            
+            # Check if it's a NonExistentQueue error
+            if error_code == 'AWS.SimpleQueueService.NonExistentQueue':
+                logger.warning(
+                    "sqs_queue_not_found",
+                    error=str(e),
+                    queue=self.input_queue_url,
+                    message="Queue does not exist yet. It may still be initializing."
+                )
+            else:
+                logger.error(
+                    "sqs_poll_failed",
+                    error=str(e),
+                    error_code=error_code,
+                    queue=self.input_queue_url
+                )
             raise
     
     def process_message(self, message: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -171,43 +183,31 @@ class SQSClient:
     def send_completion_message(
         self,
         incident_id: str,
-        status: str,
-        timestamp: str,
-        processing_time: float,
-        signals_fetched: list,
-        s3_keys: Dict[str, str],
-        edal_descriptor_key: str = None,
-        error_message: str = None,
-        metadata: Dict[str, Any] = None
+        company_id: str,
+        service: str,
+        environment: str,
+        s3_urls: Dict[str, str]
     ) -> bool:
-        """Send job completion message to output queue.
+        """Send job completion message to output queue in new format.
         
         Args:
             incident_id: Incident identifier
-            status: Job status (completed, failed, partial)
-            timestamp: ISO format timestamp
-            processing_time: Processing time in seconds
-            signals_fetched: List of signals fetched
-            s3_keys: Dictionary of S3 keys for each signal
-            edal_descriptor_key: Optional EDAL descriptor S3 key
-            error_message: Optional error message
-            metadata: Optional additional metadata
+            company_id: Company/tenant identifier
+            service: Service name
+            environment: Environment (prod, dev, staging)
+            s3_urls: Dictionary of S3 URLs for each signal
             
         Returns:
             True if successful, False otherwise
         """
         try:
-            # Create completion message
+            # Create completion message in new format
             completion_msg = create_job_completion_message(
                 incident_id=incident_id,
-                status=status,
-                timestamp=timestamp,
-                processing_time=processing_time,
-                signals_fetched=signals_fetched,
-                s3_keys=s3_keys,
-                edal_descriptor_key=edal_descriptor_key,
-                error_message=error_message,
-                metadata=metadata
+                company_id=company_id,
+                service=service,
+                environment=environment,
+                s3_urls=s3_urls
             )
             
             # Prepare send parameters
@@ -227,7 +227,7 @@ class SQSClient:
             logger.info(
                 "sqs_completion_message_sent",
                 incident_id=incident_id,
-                status=status,
+                company_id=company_id,
                 message_id=response['MessageId'],
                 queue=self.output_queue_url
             )
@@ -259,14 +259,52 @@ class SQSClient:
         logger.info("starting_sqs_polling_loop", queue=self.input_queue_url, continuous=max_empty_polls is None)
         
         empty_poll_count = 0
+        consecutive_errors = 0
+        max_consecutive_errors = 5
         
         try:
             while True:
-                # Poll for messages
-                messages = self.poll_messages(
-                    max_messages=1,
-                    wait_time_seconds=poll_interval
-                )
+                try:
+                    # Poll for messages
+                    messages = self.poll_messages(
+                        max_messages=1,
+                        wait_time_seconds=poll_interval
+                    )
+                    
+                    # Reset error counter on successful poll
+                    consecutive_errors = 0
+                    
+                except Exception as poll_error:
+                    consecutive_errors += 1
+                    
+                    # Check if it's a queue not found error
+                    error_str = str(poll_error)
+                    if "NonExistentQueue" in error_str:
+                        logger.warning(
+                            "sqs_queue_not_ready",
+                            attempt=consecutive_errors,
+                            max_attempts=max_consecutive_errors,
+                            message="Queue not found. Waiting for LocalStack initialization..."
+                        )
+                        
+                        # Wait before retrying (exponential backoff)
+                        wait_time = min(2 ** consecutive_errors, 30)  # Max 30 seconds
+                        logger.info("retrying_after_wait", wait_seconds=wait_time)
+                        time.sleep(wait_time)
+                        
+                        if consecutive_errors >= max_consecutive_errors:
+                            logger.error(
+                                "sqs_queue_still_not_found",
+                                message="Queue not found after multiple retries. Please check LocalStack configuration."
+                            )
+                            raise
+                        
+                        continue
+                    else:
+                        # Other error - re-raise
+                        raise
+                
+                messages = messages if 'messages' in locals() else []
                 
                 if not messages:
                     empty_poll_count += 1
