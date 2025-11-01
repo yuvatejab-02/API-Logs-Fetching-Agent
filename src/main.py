@@ -6,6 +6,7 @@ Handles: SQS → Payload → LLM Query → Multi-Signal Fetch → Raw S3 Upload 
 import sys
 import json
 import time
+import requests
 from typing import Dict, Any, Optional
 from datetime import datetime, timezone, timedelta
 
@@ -553,13 +554,37 @@ class IncidentLogAnalyzer:
             True if processing successful, False otherwise
         """
         start_time = time.time()
+        incident_id = "unknown"
         
         try:
             # Import validation function
             from .utils.sqs_schema import validate_and_extract_payload
             
             # Validate payload and extract SigNoz credentials
-            incident, signoz_api_endpoint, signoz_api_key = validate_and_extract_payload(payload)
+            try:
+                incident, signoz_api_endpoint, signoz_api_key = validate_and_extract_payload(payload)
+            except ValueError as e:
+                # Credential validation failed
+                print("\n" + "="*80)
+                print("❌ CREDENTIAL VALIDATION FAILED")
+                print("="*80)
+                print(f"Error: {str(e)}")
+                print("\nPlease ensure your input payload includes:")
+                print("  - data_sources[0].connection_info.api_endpoint")
+                print("  - data_sources[0].auth_config.api_key")
+                print("="*80 + "\n")
+                logger.error("credential_validation_failed", error=str(e))
+                return False
+            except Exception as e:
+                # Other validation errors
+                print("\n" + "="*80)
+                print("❌ PAYLOAD VALIDATION FAILED")
+                print("="*80)
+                print(f"Error: {str(e)}")
+                print("\nPlease check your input payload format.")
+                print("="*80 + "\n")
+                logger.error("payload_validation_failed", error=str(e))
+                return False
             
             # Extract parameters from incident section
             incident_id = incident.get("incident_id", "unknown")
@@ -603,15 +628,59 @@ class IncidentLogAnalyzer:
             print(f"🤖 Generating LLM filter query for incident {incident_id}...")
             
             # Process incident with credentials from payload
-            result = self.process_incident(
-                incident_payload=incident,
-                signoz_api_endpoint=signoz_api_endpoint,
-                signoz_api_key=signoz_api_key,
-                initial_lookback_hours=lookback_hours,
-                tenant=tenant,
-                environment=environment,
-                generate_edal=True
-            )
+            try:
+                result = self.process_incident(
+                    incident_payload=incident,
+                    signoz_api_endpoint=signoz_api_endpoint,
+                    signoz_api_key=signoz_api_key,
+                    initial_lookback_hours=lookback_hours,
+                    tenant=tenant,
+                    environment=environment,
+                    generate_edal=True
+                )
+            except requests.exceptions.HTTPError as e:
+                if e.response and e.response.status_code in [401, 403]:
+                    # Authentication/authorization failed
+                    print("\n" + "="*80)
+                    print("❌ SIGNOZ AUTHENTICATION FAILED")
+                    print("="*80)
+                    print(f"Error: Invalid SigNoz credentials (HTTP {e.response.status_code})")
+                    print("\nThe API endpoint or API key provided in the payload is incorrect.")
+                    print(f"Endpoint: {signoz_api_endpoint}")
+                    print("API Key: ***REDACTED***")
+                    print("\nPlease verify your SigNoz credentials and try again.")
+                    print("="*80 + "\n")
+                    logger.error(
+                        "signoz_authentication_failed",
+                        incident_id=incident_id,
+                        endpoint=signoz_api_endpoint,
+                        status_code=e.response.status_code
+                    )
+                    return False
+                else:
+                    # Other HTTP errors
+                    raise
+            except Exception as e:
+                # Check if it's a connection error
+                if "Connection" in str(e) or "Timeout" in str(e):
+                    print("\n" + "="*80)
+                    print("❌ SIGNOZ CONNECTION FAILED")
+                    print("="*80)
+                    print(f"Error: Unable to connect to SigNoz API")
+                    print(f"Endpoint: {signoz_api_endpoint}")
+                    print(f"Details: {str(e)}")
+                    print("\nPlease verify the API endpoint is correct and accessible.")
+                    print("="*80 + "\n")
+                    logger.error(
+                        "signoz_connection_failed",
+                        incident_id=incident_id,
+                        endpoint=signoz_api_endpoint,
+                        error=str(e)
+                    )
+                    return False
+                else:
+                    # Other errors - let them propagate
+                    raise
             
             # Prepare S3 URLs for completion message
             s3_urls = {}
@@ -649,6 +718,7 @@ class IncidentLogAnalyzer:
                 print("✅ JOB COMPLETED - OUTPUT QUEUE MESSAGE")
                 print("="*80)
                 completion_payload = {
+                    "type": "log-fetcher-response",
                     "incident": {
                         "incident_id": incident_id,
                         "company_id": company_id,

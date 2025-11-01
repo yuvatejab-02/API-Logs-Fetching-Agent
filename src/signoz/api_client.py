@@ -15,22 +15,21 @@ class SigNozClient:
         """Initialize SigNoz API client.
         
         Args:
-            api_endpoint: SigNoz API endpoint URL (if None, loads from settings)
-            api_key: SigNoz API key (if None, loads from settings)
+            api_endpoint: SigNoz API endpoint URL (required)
+            api_key: SigNoz API key (required)
+            
+        Raises:
+            ValueError: If api_endpoint or api_key are not provided
         """
-        settings = get_settings()
+        # Credentials must be provided - no fallback to settings
+        if not api_endpoint:
+            raise ValueError("SigNoz API endpoint must be provided in the input payload")
         
-        # Use provided credentials or fall back to settings
-        endpoint = api_endpoint or settings.signoz_api_endpoint
-        if not endpoint:
-            raise ValueError("SigNoz API endpoint must be provided either as argument or in settings")
+        if not api_key:
+            raise ValueError("SigNoz API key must be provided in the input payload")
         
-        self.api_endpoint = endpoint.rstrip('/')
-        self.api_key = api_key or settings.signoz_api_key
-        
-        if not self.api_key:
-            raise ValueError("SigNoz API key must be provided either as argument or in settings")
-        
+        self.api_endpoint = api_endpoint.rstrip('/')
+        self.api_key = api_key
         self.timeout = 30
         self.headers = {
             "Content-Type": "application/json",

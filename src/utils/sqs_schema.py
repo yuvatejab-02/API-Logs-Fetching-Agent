@@ -114,8 +114,12 @@ validate_incident_payload = fastjsonschema.compile(INCIDENT_PAYLOAD_SCHEMA)
 JOB_COMPLETION_SCHEMA = {
     "$schema": "http://json-schema.org/draft-07/schema#",
     "type": "object",
-    "required": ["incident", "sources"],
+    "required": ["type", "incident", "sources"],
     "properties": {
+        "type": {
+            "type": "string",
+            "const": "log-fetcher-response"
+        },
         "incident": {
             "type": "object",
             "required": ["incident_id", "company_id", "service", "env"],
@@ -307,6 +311,7 @@ def create_job_completion_message(
         Job completion message in new format
     """
     message = {
+        "type": "log-fetcher-response",
         "incident": {
             "incident_id": incident_id,
             "company_id": company_id,

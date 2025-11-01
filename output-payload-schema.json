@@ -1,9 +1,14 @@
 {
     "$schema": "http://json-schema.org/draft-07/schema#",
     "title": "Incident Data Output Payload Schema",
-    "description": "Schema for incident data fetch completion payloads. Contains S3 URLs for fetched logs, metrics, and traces from various data sources.",
+    "description": "Schema for incident data fetch completion payloads. Contains S3 URLs for fetched logs, metrics, and traces from SigNoz.",
     "type": "object",
     "properties": {
+      "type": {
+        "description": "Message type identifier",
+        "type": "string",
+        "const": "log-fetcher-response"
+      },
       "incident": {
         "description": "Core incident information from the original request",
         "type": "object",
@@ -58,71 +63,20 @@
               }
             },
             "additionalProperties": false
-          },
-          "cloudwatch": {
-            "description": "CloudWatch data source URLs (logs, metrics)",
-            "type": "object",
-            "properties": {
-              "logs": {
-                "description": "S3 URL for CloudWatch logs data",
-                "type": "string",
-                "pattern": "^https://[a-z0-9-]+\\.s3\\.[a-z0-9-]+\\.amazonaws\\.com/raw/[a-z0-9-]+/[a-z0-9-]+/[a-z0-9-]+/logs/date=[0-9-]+/hour=[0-9]+/incident_id=[A-Z_0-9]+/window=[0-9-]+/seq=[0-9]+/part-[0-9]+\\.json\\.gz$"
-              },
-              "metrics": {
-                "description": "S3 URL for CloudWatch metrics data",
-                "type": "string",
-                "pattern": "^https://[a-z0-9-]+\\.s3\\.[a-z0-9-]+\\.amazonaws\\.com/raw/[a-z0-9-]+/[a-z0-9-]+/[a-z0-9-]+/metrics/date=[0-9-]+/hour=[0-9]+/incident_id=[A-Z_0-9]+/window=[0-9-]+/seq=[0-9]+/part-[0-9]+\\.json\\.gz$"
-              }
-            },
-            "additionalProperties": false
-          },
-          "grafana": {
-            "description": "Grafana data source URLs (logs, traces, metrics)",
-            "type": "object",
-            "properties": {
-              "logs": {
-                "description": "S3 URL for Grafana logs data",
-                "type": "string",
-                "pattern": "^https://[a-z0-9-]+\\.s3\\.[a-z0-9-]+\\.amazonaws\\.com/raw/[a-z0-9-]+/[a-z0-9-]+/[a-z0-9-]+/logs/date=[0-9-]+/hour=[0-9]+/incident_id=[A-Z_0-9]+/window=[0-9-]+/seq=[0-9]+/part-[0-9]+\\.json\\.gz$"
-              },
-              "traces": {
-                "description": "S3 URL for Grafana traces data",
-                "type": "string",
-                "pattern": "^https://[a-z0-9-]+\\.s3\\.[a-z0-9-]+\\.amazonaws\\.com/raw/[a-z0-9-]+/[a-z0-9-]+/[a-z0-9-]+/traces/date=[0-9-]+/hour=[0-9]+/incident_id=[A-Z_0-9]+/window=[0-9-]+/seq=[0-9]+/part-[0-9]+\\.json\\.gz$"
-              },
-              "metrics": {
-                "description": "S3 URL for Grafana metrics data",
-                "type": "string",
-                "pattern": "^https://[a-z0-9-]+\\.s3\\.[a-z0-9-]+\\.amazonaws\\.com/raw/[a-z0-9-]+/[a-z0-9-]+/[a-z0-9-]+/metrics/date=[0-9-]+/hour=[0-9]+/incident_id=[A-Z_0-9]+/window=[0-9-]+/seq=[0-9]+/part-[0-9]+\\.json\\.gz$"
-              }
-            },
-            "additionalProperties": false
-          },
-          "prometheus": {
-            "description": "Prometheus data source URLs (metrics only)",
-            "type": "object",
-            "properties": {
-              "metrics": {
-                "description": "S3 URL for Prometheus metrics data",
-                "type": "string",
-                "pattern": "^https://[a-z0-9-]+\\.s3\\.[a-z0-9-]+\\.amazonaws\\.com/raw/[a-z0-9-]+/[a-z0-9-]+/[a-z0-9-]+/metrics/date=[0-9-]+/hour=[0-9]+/incident_id=[A-Z_0-9]+/window=[0-9-]+/seq=[0-9]+/part-[0-9]+\\.json\\.gz$"
-              }
-            },
-            "additionalProperties": false
           }
         },
         "additionalProperties": false
       }
     },
-    "required": ["incident", "sources"],
+    "required": ["type", "incident", "sources"],
     "additionalProperties": false,
     "notes": {
       "usage": [
         "This schema validates incident data fetch completion payloads",
-        "Contains S3 HTTPS URLs for accessing fetched logs, metrics, and traces",
+        "Type field identifies this as a 'log-fetcher-response' message",
+        "Contains S3 HTTPS URLs for accessing fetched logs, metrics, and traces from SigNoz",
         "URLs follow partitioned structure: raw/env/tenant/service/signal/date/hour/incident_id/window/seq/part-*.json.gz",
-        "Each data source object contains only the signal types it provided",
-        "Empty source objects indicate no data was fetched from that source"
+        "Each signal type (logs, traces, metrics) has its own S3 URL"
       ],
       "url_structure": [
         "Base pattern: https://bucket.s3.region.amazonaws.com/raw/env/tenant/service/signal/date=YYYY-MM-DD/hour=HH/incident_id=ID/window=start-end/seq=SEQ/part-PART.json.gz",
@@ -130,12 +84,10 @@
       ],
       "data_sources": [
         "signoz: Provides logs, traces, and metrics",
-        "cloudwatch: Provides logs and metrics (no traces)",
-        "grafana: Provides logs, traces, and metrics (when used as data aggregator)",
-        "prometheus: Provides metrics only",
-        "Sources appear only if they contributed data to the incident"
+        "Only SigNoz is currently supported as a data source"
       ],
       "validation_rules": [
+        "Type must be 'log-fetcher-response'",
         "Incident ID must match pattern: INC_[alphanumeric_]+",
         "Service names must be lowercase alphanumeric with hyphens",
         "Environment must be one of: dev, staging, prod, production",
