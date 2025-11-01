@@ -6,7 +6,7 @@
     "containerDefinitions": [
         {
             "name": "api-logs-fetching-agent",
-            "image": "528104389666.dkr.ecr.ap-southeast-1.amazonaws.com/bugraid-dev-bugraid-app:api-logs-fetching-agent-dev-v9",
+            "image": "528104389666.dkr.ecr.ap-southeast-1.amazonaws.com/bugraid-agentic-ai-dev:api-logs-fetching-agent-dev-v2.0.0",
             "cpu": 0,
             "portMappings": [
                 {
