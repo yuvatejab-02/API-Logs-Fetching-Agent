@@ -13,6 +13,7 @@ services:
       - DATA_DIR=/var/lib/localstack
       - PERSISTENCE=1
       - DEFAULT_REGION=us-east-1
+      - SQS_ENDPOINT_STRATEGY=off  # Use standard queue URLs
     volumes:
       - "./localstack/volume:/var/lib/localstack"
       - "./localstack/init-sqs.sh:/etc/localstack/init/ready.d/init-sqs.sh"
@@ -22,7 +23,7 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 15
 
   # Incident Log Analyzer
   incident-analyzer:
@@ -47,10 +48,11 @@ services:
       - USE_LOCALSTACK=true
       - LOCALSTACK_ENDPOINT=http://localstack:4566
       
-      # SQS (LocalStack)
+      # SQS (LocalStack) - Using localstack hostname for container-to-container communication
       - SQS_ENABLED=true
       - SQS_INPUT_QUEUE_URL=http://localstack:4566/000000000000/incident-input-queue
       - SQS_OUTPUT_QUEUE_URL=http://localstack:4566/000000000000/incident-output-queue
+      - SQS_ENDPOINT_URL=http://localstack:4566
       - SQS_POLL_INTERVAL=20
       # SQS_MAX_EMPTY_POLLS not set = infinite polling (continuous)
       
@@ -69,8 +71,9 @@ services:
         condition: service_healthy
     command: >
       sh -c "
-        echo 'Waiting for LocalStack...' &&
-        sleep 10 &&
+        echo 'Waiting for LocalStack to initialize queues...' &&
+        sleep 20 &&
+        echo 'Starting application...' &&
         python -m src.main
       "
 
