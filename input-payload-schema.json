@@ -1,0 +1,118 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Incident Data Fetch Input Payload Schema",
+    "description": "Schema for incident data fetch job payloads. Contains SigNoz data source configuration with credentials and incident details.",
+    "type": "object",
+    "required": ["job_type", "data_sources", "incident"],
+    "properties": {
+      "job_type": {
+        "description": "Type of job being executed",
+        "type": "string",
+        "enum": ["incident-data-fetch"]
+      },
+      "data_sources": {
+        "description": "Array of data sources to fetch incident data from (currently only SigNoz is supported)",
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 1,
+        "items": {
+          "type": "object",
+          "required": ["source_type", "connection_info", "auth_config"],
+          "properties": {
+            "source_type": {
+              "description": "Type of data source (only signoz is supported)",
+              "type": "string",
+              "enum": ["signoz"]
+            },
+            "connection_info": {
+              "description": "SigNoz connection parameters",
+              "type": "object",
+              "required": ["api_endpoint"],
+              "properties": {
+                "api_endpoint": {
+                  "type": "string",
+                  "pattern": "^https://[a-z0-9-]+\\.[a-z]+\\.signoz\\.cloud$",
+                  "description": "SigNoz API endpoint URL (e.g., https://selected-starling.us.signoz.cloud)"
+                }
+              },
+              "additionalProperties": false
+            },
+            "auth_config": {
+              "description": "Authentication configuration for SigNoz",
+              "type": "object",
+              "required": ["auth_type", "api_key"],
+              "properties": {
+                "auth_type": {
+                  "description": "Type of authentication (only api_key is supported)",
+                  "type": "string",
+                  "enum": ["api_key"]
+                },
+                "api_key": {
+                  "description": "SigNoz API key for authentication",
+                  "type": "string",
+                  "pattern": "^[a-zA-Z0-9+/=]+$",
+                  "minLength": 1
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "incident": {
+        "description": "Incident details for data fetching context",
+        "type": "object",
+        "required": ["incident_id", "company_id", "title", "service"],
+        "properties": {
+          "incident_id": {
+            "description": "Unique incident identifier",
+            "type": "string",
+            "pattern": "^INC_[a-zA-Z0-9_]+$",
+            "minLength": 1
+          },
+          "company_id": {
+            "description": "Company/tenant identifier",
+            "type": "string",
+            "pattern": "^[a-z0-9-]+$",
+            "minLength": 1
+          },
+          "title": {
+            "description": "Human-readable incident title",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "service": {
+            "description": "Affected service information",
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+              "name": {
+                "description": "Service name",
+                "type": "string",
+                "pattern": "^[a-z0-9-]+$",
+                "minLength": 1
+              }
+            },
+            "additionalProperties": false
+          },
+          "environment": {
+            "description": "Environment where incident occurred (optional, defaults to prod)",
+            "type": "string",
+            "enum": ["prod", "staging", "dev"],
+            "default": "prod"
+          },
+          "lookback_hours": {
+            "description": "Hours to look back for data (optional, defaults to 1)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 24,
+            "default": 1
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "additionalProperties": false
+  }

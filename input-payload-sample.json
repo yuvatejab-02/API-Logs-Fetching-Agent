@@ -1,0 +1,25 @@
+{
+  "job_type": "incident-data-fetch",
+  "data_sources": [
+    {
+      "source_type": "signoz",
+      "connection_info": {
+        "api_endpoint": "https://selected-starling.us.signoz.cloud"
+      },
+      "auth_config": {
+        "auth_type": "api_key",
+        "api_key": "dNhCOwci+IlSxzqb4RO1jCe6GA8VMugoJ6kcyWwY7TM="
+      }
+    }
+  ],
+  "incident": {
+    "incident_id": "INC_test_004",
+    "company_id": "gokwik",
+    "title": "System-wide Analysis",
+    "service": {
+      "name": "all-services"
+    },
+    "environment": "prod",
+    "lookback_hours": 1
+  }
+}

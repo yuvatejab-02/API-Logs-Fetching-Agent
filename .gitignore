@@ -21,6 +21,19 @@ dist/
 .pytest_cache/
 .coverage
 htmlcov/
+tests/reports/
+
+# Test outputs (generated during E2E tests)
+output/*/
+performance_reports/*.json
+!performance_reports/.gitkeep
+
+# LocalStack data
+localstack/volume/cache/
+localstack/volume/lib/
+localstack/volume/logs/
+localstack/volume/state/
+localstack/volume/tmp/
 
 # IDE
 .vscode/
