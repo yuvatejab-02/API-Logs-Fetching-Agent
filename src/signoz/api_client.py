@@ -11,11 +11,26 @@ logger = get_logger(__name__)
 class SigNozClient:
     """Lightweight client for SigNoz API dry-run queries."""
     
-    def __init__(self):
-        """Initialize SigNoz API client."""
+    def __init__(self, api_endpoint: str = None, api_key: str = None):
+        """Initialize SigNoz API client.
+        
+        Args:
+            api_endpoint: SigNoz API endpoint URL (if None, loads from settings)
+            api_key: SigNoz API key (if None, loads from settings)
+        """
         settings = get_settings()
-        self.api_endpoint = settings.signoz_api_endpoint.rstrip('/')
-        self.api_key = settings.signoz_api_key
+        
+        # Use provided credentials or fall back to settings
+        endpoint = api_endpoint or settings.signoz_api_endpoint
+        if not endpoint:
+            raise ValueError("SigNoz API endpoint must be provided either as argument or in settings")
+        
+        self.api_endpoint = endpoint.rstrip('/')
+        self.api_key = api_key or settings.signoz_api_key
+        
+        if not self.api_key:
+            raise ValueError("SigNoz API key must be provided either as argument or in settings")
+        
         self.timeout = 30
         self.headers = {
             "Content-Type": "application/json",

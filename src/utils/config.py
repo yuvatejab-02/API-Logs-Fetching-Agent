@@ -20,9 +20,10 @@ class Settings(BaseSettings):
     bedrock_region: str = "us-east-1"  # Bedrock is only available in specific regions
     bedrock_model_id: str = "anthropic.claude-3-5-sonnet-20241022-v2:0"
     
-    # SigNoz Configuration
-    signoz_api_endpoint: str
-    signoz_api_key: str
+    # SigNoz Configuration (DEPRECATED - now provided via payload)
+    # These are kept optional for backward compatibility with local testing
+    signoz_api_endpoint: Optional[str] = None
+    signoz_api_key: Optional[str] = None
     
     # S3/LocalStack
     s3_bucket_name: str = "incident-logs"
@@ -32,6 +33,7 @@ class Settings(BaseSettings):
     # SQS Configuration
     sqs_input_queue_url: Optional[str] = None
     sqs_output_queue_url: Optional[str] = None
+    sqs_endpoint_url: Optional[str] = None  # For LocalStack or custom SQS endpoints
     sqs_enabled: bool = False
     sqs_poll_interval: int = 20
     sqs_max_empty_polls: Optional[int] = None  # None = infinite polling
