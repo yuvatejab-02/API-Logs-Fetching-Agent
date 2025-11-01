@@ -266,6 +266,22 @@ class RawS3Storage:
             )
             raise
     
+    def get_s3_url_from_key(self, s3_key: str) -> str:
+        """Convert S3 key to full HTTPS URL.
+        
+        Args:
+            s3_key: S3 object key
+            
+        Returns:
+            Full HTTPS URL to the S3 object
+        """
+        if self.settings.is_local_environment:
+            # For LocalStack, return the LocalStack URL
+            return f"{self.settings.localstack_endpoint}/{self.bucket_name}/{s3_key}"
+        else:
+            # For AWS, return standard S3 HTTPS URL
+            return f"https://{self.bucket_name}.s3.{self.settings.aws_region}.amazonaws.com/{s3_key}"
+    
     def _build_key(
         self,
         environment: str,
